@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Smart Cow</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+    header {
+      background-color: #4CAF50;
+      color: white;
+      padding: 2rem 1rem;
+    }
+    h1 {
+      margin-bottom: 0.5rem;
+    }
+    p {
+      margin: 0.5rem 0 1.5rem;
+    }
+    .container {
+      padding: 2rem;
+    }
+    .button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      text-decoration: none;
+      border-radius: 5px;
+      font-size: 1.1rem;
+    }
+    .features {
+      max-width: 600px;
+      margin: 2rem auto;
+      text-align: left;
+    }
+    .features li {
+      margin-bottom: 1rem;
+    }
+    .contact {
+      margin-top: 2rem;
+      font-size: 1rem;
+    }
+    footer {
+      margin-top: 3rem;
+      font-size: 0.9rem;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>My Smart Cow</h1>
+    <p>Smart Monitoring for Dairy Farmers</p>
+  </header>
+
+  <div class="container">
+    <a class="button" href="https://github.com/gichirucharles/my-smart-cow" target="_blank">View on GitHub</a>
+
+    <div class="features">
+      <h2>Features</h2>
+      <ul>
+        <li>📈 Track milk production by individual cows</li>
+        <li>💰 Automatically calculate and display daily sales</li>
+        <li>🧮 Input and edit milk prices per liter</li>
+        <li>🗃️ View history of past milk sales</li>
+        <li>📱 Mobile-friendly and simple to use</li>
+      </ul>
+    </div>
+
+    <div class="contact">
+      <h3>Contact</h3>
+      <p>Email: <a href="mailto:charlesmuiruri024@gmail.com">charlesmuiruri024@gmail.com</a></p>
+      <p>WhatsApp: <a href="https://wa.me/254723252885" target="_blank">+254 723 252 885</a></p>
+    </div>
+
+    <footer>
+      © 2025 My Smart Cow | Built by Charles Muiruri Gichiru
+    </footer>
+  </div>
+</body>
+</html>
