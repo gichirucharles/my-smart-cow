@@ -1,154 +1,378 @@
 "use client"
 
+import type React from "react"
+
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { usePathname } from "next/navigation"
 import {
-  Home,
-  Milk,
-  BarChart2,
-  Settings,
-  LogOut,
-  DollarSign,
-  HelpCircle,
-  ShoppingBag,
+  BarChart3,
+  MilkIcon as Cow,
   CreditCard,
   FileText,
+  Home,
+  Leaf,
+  Menu,
+  Milk,
+  Package,
+  Settings,
+  ShoppingCart,
+  Users,
+  X,
+  HelpCircle,
+  Baby,
+  Stethoscope,
+  History,
+  DollarSign,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { cn } from "@/lib/utils"
+import { useAuth } from "@/components/auth-provider"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { useState, useEffect } from "react"
 
-export function Sidebar() {
+interface NavItem {
+  title: string
+  href: string
+  icon: React.ReactNode
+  disabled?: boolean
+}
+
+export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
   const pathname = usePathname()
-  const router = useRouter()
+  const { user, logout } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [inactiveUsers, setInactiveUsers] = useState<string[]>([])
 
-  const handleLogout = () => {
-    localStorage.removeItem("currentUser")
-    router.push("/login")
-  }
+  useEffect(() => {
+    // Check for inactive users (those who haven't logged in for 30 days)
+    if (user?.isAdmin) {
+      const users = JSON.parse(localStorage.getItem("users") || "[]")
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-  // Get user name
-  let userName = "User"
-  try {
-    const userData = localStorage.getItem("currentUser")
-    if (userData) {
-      const user = JSON.parse(userData)
-      userName = user.name || "User"
+      const inactive = users
+        .filter((u: any) => {
+          const lastLogin = u.lastLogin ? new Date(u.lastLogin) : null
+          return lastLogin && lastLogin < thirtyDaysAgo
+        })
+        .map((u: any) => u.name)
+
+      setInactiveUsers(inactive)
     }
-  } catch (error) {
-    console.error("Error getting user data:", error)
-  }
+  }, [user])
 
-  // Navigation items
-  const navItems = [
-    { href: "/", label: "Dashboard", icon: <Home className="h-5 w-5" /> },
+  const navItems: NavItem[] = [
     {
-      href: "/cows",
-      label: "Cow Management",
+      title: "Dashboard",
+      href: "/",
+      icon: <Home className="h-5 w-5" />,
+    },
+    {
+      title: "Milk Production",
+      href: "/production",
       icon: <Milk className="h-5 w-5" />,
-      subItems: [{ href: "/calves", label: "Calves" }],
     },
-    { href: "/production", label: "Milk Production", icon: <Milk className="h-5 w-5" /> },
     {
+      title: "Cows",
+      href: "/cows",
+      icon: <Cow className="h-5 w-5" />,
+    },
+    {
+      title: "Calves",
+      href: "/calves",
+      icon: <Baby className="h-5 w-5" />,
+    },
+    {
+      title: "Feeds & Concentrates",
+      href: "/feeds",
+      icon: <Leaf className="h-5 w-5" />,
+    },
+    {
+      title: "Cow Feeding",
+      href: "/cow-feeding",
+      icon: <Package className="h-5 w-5" />,
+    },
+    {
+      title: "Veterinary",
+      href: "/veterinary",
+      icon: <Stethoscope className="h-5 w-5" />,
+    },
+    {
+      title: "Vet Visits",
+      href: "/vet-visits",
+      icon: <FileText className="h-5 w-5" />,
+    },
+    {
+      title: "Expenses",
       href: "/expenses",
-      label: "Expenses",
       icon: <DollarSign className="h-5 w-5" />,
-      subItems: [
-        { href: "/feeds", label: "Feeds & Feeding" },
-        { href: "/veterinary", label: "Veterinary" },
-      ],
     },
     {
+      title: "Vendors",
       href: "/vendors",
-      label: "Vendors",
-      icon: <ShoppingBag className="h-5 w-5" />,
-      subItems: [{ href: "/milk-pricing", label: "Milk Pricing" }],
+      icon: <ShoppingCart className="h-5 w-5" />,
     },
-    { href: "/reports", label: "Reports", icon: <BarChart2 className="h-5 w-5" /> },
-    { href: "/subscription", label: "Subscription", icon: <CreditCard className="h-5 w-5" /> },
-    { href: "/payment-history", label: "Payment History", icon: <FileText className="h-5 w-5" /> },
-    { href: "/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> },
-    { href: "/support", label: "Support", icon: <HelpCircle className="h-5 w-5" /> },
+    {
+      title: "Milk Pricing",
+      href: "/milk-pricing",
+      icon: <BarChart3 className="h-5 w-5" />,
+    },
+    {
+      title: "Reports",
+      href: "/reports",
+      icon: <FileText className="h-5 w-5" />,
+    },
+    {
+      title: "Subscription",
+      href: "/subscription",
+      icon: <CreditCard className="h-5 w-5" />,
+    },
+    {
+      title: "Payment History",
+      href: "/payment-history",
+      icon: <History className="h-5 w-5" />,
+    },
+  ]
+
+  const adminItems: NavItem[] = [
+    {
+      title: "Admin Dashboard",
+      href: "/admin",
+      icon: <Users className="h-5 w-5" />,
+    },
+  ]
+
+  const bottomItems: NavItem[] = [
+    {
+      title: "Settings",
+      href: "/settings",
+      icon: <Settings className="h-5 w-5" />,
+    },
+    {
+      title: "Support",
+      href: "/support",
+      icon: <HelpCircle className="h-5 w-5" />,
+    },
   ]
 
   return (
-    <div className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 shadow-lg overflow-y-auto z-40">
-      <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              width="32"
-              height="32"
-              className="text-emerald-600 dark:text-emerald-400"
-            >
-              <path
-                fill="currentColor"
-                d="M18.5 2.75a.75.75 0 0 1 .75.75v1a.75.75 0 0 1-1.5 0v-1a.75.75 0 0 1 .75-.75Zm2.25 2.5a.75.75 0 0 1 .75-.75h1a.75.75 0 0 1 0 1.5h-1a.75.75 0 0 1-.75-.75Zm-4.5 0a.75.75 0 0 1 .75-.75h1a.75.75 0 0 1 0 1.5h-1a.75.75 0 0 1-.75-.75Zm.75 2.75a.75.75 0 0 0-.75.75v1a.75.75 0 0 0 1.5 0v-1a.75.75 0 0 0-.75-.75ZM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7ZM8.5 12a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0Zm11.75 4.484c-.16-.293-.552-.398-.845-.238a5.5 5.5 0 0 1-5.61.141.75.75 0 0 0-.69 1.331 7 7 0 0 0 7.145-.234c.293-.16.398-.552.238-.845l-.238-.155ZM12 2.75a9.25 9.25 0 1 0 0 18.5 9.25 9.25 0 0 0 0-18.5ZM4.25 12a7.75 7.75 0 1 1 15.5 0 7.75 7.75 0 0 1-15.5 0Z"
-              />
-            </svg>
-            <h1 className="ml-2 text-xl font-bold">My Smart Cow</h1>
-          </div>
-          <div className="mt-2 text-center text-sm">
-            <p className="font-medium">Hello, {userName}</p>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 p-2">
-          <ul className="space-y-1">
-            {navItems.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    pathname === item.href
-                      ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-100"
-                      : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-                  }`}
-                >
-                  <span className="mr-3">{item.icon}</span>
-                  {item.label}
-                </Link>
-
-                {/* Sub-items */}
-                {item.subItems && (
-                  <ul className="ml-8 mt-1 space-y-1">
-                    {item.subItems.map((subItem) => (
-                      <li key={subItem.href}>
-                        <Link
-                          href={subItem.href}
-                          className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                            pathname === subItem.href
-                              ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-100"
-                              : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-                          }`}
-                        >
-                          {subItem.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
-          <div className="flex items-center justify-between px-3 py-2">
-            <span className="text-sm font-medium">Theme</span>
-            <ThemeToggle />
-          </div>
-
-          <Button variant="outline" className="w-full flex items-center justify-center" onClick={handleLogout}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
+    <>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <Button variant="outline" size="icon" className="fixed left-4 top-4 z-40 lg:hidden">
+            <Menu className="h-5 w-5" />
           </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-64 p-0">
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between border-b px-4 py-2">
+              <div className="flex items-center">
+                <Cow className="mr-2 h-6 w-6 text-emerald-600" />
+                <h2 className="text-lg font-semibold">Smart Cow</h2>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <ScrollArea className="flex-1">
+              <nav className="grid gap-1 px-2 py-4">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                      pathname === item.href
+                        ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                        : "text-gray-600 dark:text-gray-400",
+                    )}
+                  >
+                    {item.icon}
+                    {item.title}
+                  </Link>
+                ))}
+
+                {user?.isAdmin && (
+                  <>
+                    <div className="my-2 border-t border-gray-200 dark:border-gray-800"></div>
+                    {adminItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className={cn(
+                          "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                          pathname === item.href
+                            ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                            : "text-gray-600 dark:text-gray-400",
+                        )}
+                      >
+                        {item.icon}
+                        {item.title}
+                      </Link>
+                    ))}
+                  </>
+                )}
+              </nav>
+            </ScrollArea>
+            <div className="border-t border-gray-200 dark:border-gray-800">
+              <nav className="grid gap-1 px-2 py-4">
+                {bottomItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                      pathname === item.href
+                        ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                        : "text-gray-600 dark:text-gray-400",
+                    )}
+                  >
+                    {item.icon}
+                    {item.title}
+                  </Link>
+                ))}
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Theme</span>
+                  <ThemeToggle />
+                </div>
+                {user && (
+                  <Button
+                    variant="ghost"
+                    className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100 hover:text-red-900 dark:text-red-400 dark:hover:bg-red-900/20 dark:hover:text-red-50"
+                    onClick={() => {
+                      logout()
+                      setOpen(false)
+                    }}
+                  >
+                    <X className="h-5 w-5" />
+                    Logout
+                  </Button>
+                )}
+              </nav>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r bg-white dark:bg-gray-950 lg:flex",
+          className,
+        )}
+      >
+        <div className="flex h-14 items-center border-b px-4">
+          <Link href="/" className="flex items-center">
+            <Cow className="mr-2 h-6 w-6 text-emerald-600" />
+            <h2 className="text-lg font-semibold">Smart Cow</h2>
+          </Link>
         </div>
+        <ScrollArea className="flex-1">
+          <nav className="grid gap-1 px-2 py-4">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                  pathname === item.href
+                    ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                    : "text-gray-600 dark:text-gray-400",
+                )}
+              >
+                {item.icon}
+                {item.title}
+              </Link>
+            ))}
+
+            {user?.isAdmin && (
+              <>
+                <div className="my-2 border-t border-gray-200 dark:border-gray-800"></div>
+                {adminItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                      pathname === item.href
+                        ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                        : "text-gray-600 dark:text-gray-400",
+                    )}
+                  >
+                    {item.icon}
+                    {item.title}
+                  </Link>
+                ))}
+              </>
+            )}
+          </nav>
+        </ScrollArea>
+        <div className="border-t border-gray-200 dark:border-gray-800">
+          <nav className="grid gap-1 px-2 py-4">
+            {bottomItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                  pathname === item.href
+                    ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                    : "text-gray-600 dark:text-gray-400",
+                )}
+              >
+                {item.icon}
+                {item.title}
+              </Link>
+            ))}
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Theme</span>
+              <ThemeToggle />
+            </div>
+            {user && (
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100 hover:text-red-900 dark:text-red-400 dark:hover:bg-red-900/20 dark:hover:text-red-50"
+                onClick={logout}
+              >
+                <X className="h-5 w-5" />
+                Logout
+              </Button>
+            )}
+          </nav>
+        </div>
+
+        {user?.isAdmin && inactiveUsers.length > 0 && (
+          <div className="border-t border-gray-200 p-4 dark:border-gray-800">
+            <div className="rounded-md bg-yellow-50 p-4 dark:bg-yellow-900/20">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg
+                    className="h-5 w-5 text-yellow-400 dark:text-yellow-500"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">Inactive Users Alert</h3>
+                  <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
+                    <p>The following users have been inactive for over 30 days: {inactiveUsers.join(", ")}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </>
   )
 }

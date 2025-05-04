@@ -1,12 +1,46 @@
 "use client"
 
+import type React from "react"
+
+import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useAuth } from "@/components/auth-provider"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { CloudOff } from "lucide-react"
 
 export default function LoginPage() {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const { login, isOnline } = useAuth()
+  const router = useRouter()
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
+    setLoading(true)
+
+    try {
+      const success = await login(email, password)
+      if (success) {
+        router.push("/")
+      } else {
+        setError("Invalid email or password")
+      }
+    } catch (err) {
+      setError("An error occurred during login")
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-50 to-teal-50 p-4">
       <Card className="w-full max-w-md">
@@ -28,36 +62,73 @@ export default function LoginPage() {
           <CardTitle className="text-2xl text-center">Welcome Back</CardTitle>
           <CardDescription className="text-center">Login to manage your dairy farm</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" placeholder="your.email@example.com" />
+
+        {!isOnline && (
+          <div className="px-6 pb-2">
+            <Alert variant="warning" className="bg-amber-50 border-amber-200">
+              <CloudOff className="h-4 w-4 text-amber-600 mr-2" />
+              <AlertDescription className="text-amber-800 text-sm">
+                You're currently offline. You can still log in if you've logged in before.
+              </AlertDescription>
+            </Alert>
           </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
-              <Link href="/forgot-password" className="text-sm text-emerald-600 hover:text-emerald-700">
-                Forgot password?
+        )}
+
+        {error && (
+          <div className="px-6 pb-2">
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="your.email@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link href="/forgot-password" className="text-sm text-emerald-600 hover:text-emerald-700">
+                  Forgot password?
+                </Link>
+              </div>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col space-y-4">
+            <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={loading}>
+              {loading ? "Signing In..." : "Sign In"}
+            </Button>
+            <div className="text-center text-sm">
+              Don't have an account?{" "}
+              <Link href="/signup" className="text-emerald-600 hover:text-emerald-700">
+                Sign up
               </Link>
             </div>
-            <Input id="password" type="password" />
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-4">
-          <Button className="w-full bg-emerald-600 hover:bg-emerald-700">Sign In</Button>
-          <div className="text-center text-sm">
-            Don't have an account?{" "}
-            <Link href="/signup" className="text-emerald-600 hover:text-emerald-700">
-              Sign up
-            </Link>
-          </div>
 
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <Button variant="outline" className="w-full" onClick={() => (window.location.href = "/")}>
-              Emergency Access (Go to Dashboard)
-            </Button>
-          </div>
-        </CardFooter>
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <Button variant="outline" className="w-full" onClick={() => (window.location.href = "/")}>
+                Emergency Access (Go to Dashboard)
+              </Button>
+            </div>
+          </CardFooter>
+        </form>
       </Card>
     </div>
   )
