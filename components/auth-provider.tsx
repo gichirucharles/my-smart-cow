@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react"
-import SecureStorage from "@/lib/secure-storage"
+import { SecureStorage } from "@/lib/secure-storage"
 
 // Simplified user type
 interface User {

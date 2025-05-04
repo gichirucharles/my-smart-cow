@@ -1,7 +1,7 @@
 // A simplified sync service for demonstration purposes
 // In a real app, this would be more complex
 
-import SecureStorage from "./secure-storage"
+import { SecureStorage } from "./secure-storage"
 
 // Interface for a pending change
 interface PendingChange {

@@ -9,27 +9,27 @@ import Script from "next/script"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Smart Cow - Dairy Farm Management",
+  title: "Maziwa Smart - Dairy Farm Management",
   description: "Manage your dairy farm efficiently",
   manifest: "/manifest.json",
   themeColor: "#2563eb",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Smart Cow",
+    title: "Maziwa Smart",
   },
   formatDetection: {
     telephone: true,
   },
   openGraph: {
     type: "website",
-    siteName: "Smart Cow",
-    title: "Smart Cow - Dairy Farm Management",
+    siteName: "Maziwa Smart",
+    title: "Maziwa Smart - Dairy Farm Management",
     description: "Manage your dairy farm efficiently",
   },
   twitter: {
     card: "summary",
-    title: "Smart Cow - Dairy Farm Management",
+    title: "Maziwa Smart - Dairy Farm Management",
     description: "Manage your dairy farm efficiently",
   },
     generator: 'v0.dev'
@@ -43,10 +43,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="application-name" content="Smart Cow" />
+        <meta name="application-name" content="Maziwa Smart" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Smart Cow" />
+        <meta name="apple-mobile-web-app-title" content="Maziwa Smart" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="msapplication-TileColor" content="#2563eb" />
         <meta name="msapplication-tap-highlight" content="no" />
@@ -58,7 +58,7 @@ export default function RootLayout({
         <link rel="shortcut icon" href="/favicon.ico" />
       </head>
       <body className={inter.className}>
-        <ThemeProvider defaultTheme="light" storageKey="smartcow-theme">
+        <ThemeProvider defaultTheme="light" storageKey="maziwa-smart-theme">
           {children}
           <Toaster />
         </ThemeProvider>

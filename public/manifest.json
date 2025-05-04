@@ -1,7 +1,7 @@
 {
-  "name": "Smart Cow - Dairy Farm Management",
-  "short_name": "Smart Cow",
-  "description": "Manage your dairy farm efficiently with Smart Cow",
+  "name": "Maziwa Smart - Dairy Farm Management",
+  "short_name": "Maziwa Smart",
+  "description": "Manage your dairy farm efficiently with Maziwa Smart",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
