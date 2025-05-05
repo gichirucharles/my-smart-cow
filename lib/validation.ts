@@ -72,12 +72,6 @@ export function validateFeed(data: any): ValidationError[] {
     errors.push({ field: "date", message: "Date is required" })
   }
 
-  if (!data  = []
-
-  if (!data.date) {
-    errors.push({ field: "date", message: "Date is required" })
-  }
-
   if (!data.type && !data.customType) {
     errors.push({ field: "type", message: "Feed type is required" })
   }
@@ -92,6 +86,12 @@ export function validateFeed(data: any): ValidationError[] {
     errors.push({ field: "cost", message: "Cost is required" })
   } else if (isNaN(Number(data.cost)) || Number(data.cost) < 0) {
     errors.push({ field: "cost", message: "Cost must be a non-negative number" })
+  }
+
+  if (data.bags !== undefined) {
+    if (isNaN(Number(data.bags)) || Number(data.bags) < 0) {
+      errors.push({ field: "bags", message: "Number of bags must be a non-negative number" })
+    }
   }
 
   return errors

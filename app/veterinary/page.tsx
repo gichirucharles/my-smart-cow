@@ -36,24 +36,24 @@ export default function VeterinaryPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+              <div className="flex justify-between items-center p-3 bg-muted rounded-md">
                 <div>
                   <p className="font-medium">Cow #1234</p>
-                  <p className="text-sm text-gray-500">Vaccination</p>
+                  <p className="text-sm text-muted-foreground">Vaccination</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm">Dr. Smith</p>
-                  <p className="text-xs text-gray-500">Yesterday</p>
+                  <p className="text-xs text-muted-foreground">Yesterday</p>
                 </div>
               </div>
-              <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+              <div className="flex justify-between items-center p-3 bg-muted rounded-md">
                 <div>
                   <p className="font-medium">Cow #5678</p>
-                  <p className="text-sm text-gray-500">Health Check</p>
+                  <p className="text-sm text-muted-foreground">Health Check</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm">Dr. Johnson</p>
-                  <p className="text-xs text-gray-500">3 days ago</p>
+                  <p className="text-xs text-muted-foreground">3 days ago</p>
                 </div>
               </div>
             </div>
@@ -67,15 +67,15 @@ export default function VeterinaryPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+              <div className="p-3 bg-muted rounded-md">
                 <p className="font-medium">Dr. Smith</p>
                 <p className="text-sm">Large Animal Specialist</p>
-                <p className="text-sm text-gray-500">Phone: (123) 456-7890</p>
+                <p className="text-sm text-muted-foreground">Phone: (123) 456-7890</p>
               </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
+              <div className="p-3 bg-muted rounded-md">
                 <p className="font-medium">Dr. Johnson</p>
                 <p className="text-sm">Dairy Specialist</p>
-                <p className="text-sm text-gray-500">Phone: (123) 456-7891</p>
+                <p className="text-sm text-muted-foreground">Phone: (123) 456-7891</p>
               </div>
             </div>
           </CardContent>

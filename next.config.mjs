@@ -49,6 +49,13 @@ const nextConfig = {
       },
     ];
   },
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'next-themes': require.resolve('./lib/theme-fallback.ts'),
+    };
+    return config;
+  },
 };
 
 export default nextConfig;
