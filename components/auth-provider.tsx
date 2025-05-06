@@ -68,11 +68,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const handleOffline = () => setIsOnline(false)
 
     // Set initial online status
-    setIsOnline(navigator.onLine)
+    if (typeof navigator !== "undefined") {
+      setIsOnline(navigator.onLine)
+    }
 
     // Add event listeners for online/offline events
-    window.addEventListener("online", handleOnline)
-    window.addEventListener("offline", handleOffline)
+    if (typeof window !== "undefined") {
+      window.addEventListener("online", handleOnline)
+      window.addEventListener("offline", handleOffline)
+    }
 
     // Set up interval to check pending changes (simplified for now)
     const interval = setInterval(() => {
@@ -82,8 +86,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, 5000)
 
     return () => {
-      window.removeEventListener("online", handleOnline)
-      window.removeEventListener("offline", handleOffline)
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", handleOnline)
+        window.removeEventListener("offline", handleOffline)
+      }
       clearInterval(interval)
     }
   }, [])
@@ -94,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       // Check if we're online
-      if (navigator.onLine) {
+      if (typeof navigator !== "undefined" && navigator.onLine) {
         // Online login - would normally call your API
         // For demo, we'll simulate a successful login
 
@@ -145,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log("AuthProvider: Signup attempt", { name, email })
 
     // Check if we're online - signup requires internet
-    if (!navigator.onLine) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
       console.log("AuthProvider: Signup failed - offline")
       return false
     }
