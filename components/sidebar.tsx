@@ -170,7 +170,7 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
             <div className="flex items-center justify-between border-b px-4 py-2">
               <div className="flex items-center">
                 <Cow className="mr-2 h-6 w-6 text-emerald-600" />
-                <h2 className="text-lg font-semibold">Smart Cow</h2>
+                <h2 className="text-lg font-semibold">Maziwa Smart</h2>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
                 <X className="h-5 w-5" />
@@ -267,7 +267,7 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
         <div className="flex h-14 items-center border-b px-4">
           <Link href="/" className="flex items-center">
             <Cow className="mr-2 h-6 w-6 text-emerald-600" />
-            <h2 className="text-lg font-semibold">Smart Cow</h2>
+            <h2 className="text-lg font-semibold">Maziwa Smart</h2>
           </Link>
         </div>
         <ScrollArea className="flex-1">
