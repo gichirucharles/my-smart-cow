@@ -49,13 +49,7 @@ const nextConfig = {
       },
     ];
   },
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      'next-themes': require.resolve('./lib/theme-fallback.ts'),
-    };
-    return config;
-  },
+  // Remove the webpack config that uses require
 };
 
 export default nextConfig;

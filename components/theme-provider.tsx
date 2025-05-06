@@ -1,6 +1,7 @@
 "use client"
+
+import type * as React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
-import type React from "react"
 
 type Theme = "dark" | "light" | "system"
 
@@ -22,24 +23,13 @@ const initialState: ThemeProviderState = {
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
-export function ThemeProvider({
+function ThemeProviderComponent({
   children,
   defaultTheme = "system",
   storageKey = "theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme)
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem(storageKey) as Theme | null
-
-    if (savedTheme) {
-      setTheme(savedTheme)
-    } else if (defaultTheme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-      setTheme(systemTheme)
-    }
-  }, [defaultTheme, storageKey])
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem(storageKey) as Theme) || defaultTheme)
 
   useEffect(() => {
     const root = window.document.documentElement
@@ -48,17 +38,18 @@ export function ThemeProvider({
 
     if (theme === "system") {
       const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+
       root.classList.add(systemTheme)
-    } else {
-      root.classList.add(theme)
+      return
     }
 
-    localStorage.setItem(storageKey, theme)
-  }, [theme, storageKey])
+    root.classList.add(theme)
+  }, [theme])
 
   const value = {
     theme,
     setTheme: (theme: Theme) => {
+      localStorage.setItem(storageKey, theme)
       setTheme(theme)
     },
   }
@@ -76,4 +67,14 @@ export const useTheme = () => {
   if (context === undefined) throw new Error("useTheme must be used within a ThemeProvider")
 
   return context
+}
+
+// Add these exports to make it compatible with next-themes
+export const ThemeProvider = Object.assign(ThemeProviderComponent as any, {
+  Provider: ThemeProviderComponent,
+})
+
+export function useThemeMode() {
+  const { theme, setTheme } = useTheme()
+  return { theme, setTheme }
 }

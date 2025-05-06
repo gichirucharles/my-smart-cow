@@ -6,23 +6,31 @@ import { SecureStorage } from "./secure-storage"
 // Interface for a pending change
 interface PendingChange {
   id: string
-  entity: string
-  action: "create" | "update" | "delete"
+  entityType: string
   data: any
   timestamp: number
+  operation: "create" | "update" | "delete"
+}
+
+export interface SyncRecord {
+  id: string
+  entityType: string
 }
 
 // Simple in-memory queue for pending changes
 let pendingChanges: PendingChange[] = []
+let conflicts: SyncRecord[] = []
 
 // Load pending changes from storage
 const loadPendingChanges = () => {
   pendingChanges = SecureStorage.getItem("pendingChanges", [])
+  conflicts = SecureStorage.getItem("conflicts", [])
 }
 
 // Save pending changes to storage
 const savePendingChanges = () => {
   SecureStorage.setItem("pendingChanges", pendingChanges)
+  SecureStorage.setItem("conflicts", conflicts)
 }
 
 // Initialize on import
@@ -31,23 +39,27 @@ loadPendingChanges()
 // The sync service singleton
 const syncService = {
   // Add a change to the queue
-  queueChange: (entity: string, action: "create" | "update" | "delete", data: any) => {
-    const change: PendingChange = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      entity,
-      action,
-      data,
-      timestamp: Date.now(),
-    }
-
+  queueChange: (change: PendingChange) => {
     pendingChanges.push(change)
     savePendingChanges()
-    return change.id
   },
 
   // Get the number of pending changes
   getPendingChangesCount: () => {
     return pendingChanges.length
+  },
+
+  getConflicts: (): SyncRecord[] => {
+    return conflicts
+  },
+
+  resolveConflict: (id: string, acceptLocal: boolean) => {
+    conflicts = conflicts.filter((c) => c.id !== id)
+    savePendingChanges()
+  },
+
+  getOnlineStatus: (): boolean => {
+    return navigator.onLine
   },
 
   // Process the queue when online
