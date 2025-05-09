@@ -30,6 +30,7 @@ interface Vendor {
   email?: string
   address?: string
   notes?: string
+  defaultMilkPrice?: number // Add default milk price for vendor
 }
 
 interface MilkCollection {
@@ -60,6 +61,7 @@ export default function VendorsPage() {
     email: "",
     address: "",
     notes: "",
+    defaultMilkPrice: 0, // Initialize default milk price
   })
   const [newCollection, setNewCollection] = useState<Partial<MilkCollection>>({
     vendorId: "",
@@ -141,6 +143,7 @@ export default function VendorsPage() {
       email: newVendor.email || "",
       address: newVendor.address || "",
       notes: newVendor.notes || "",
+      defaultMilkPrice: newVendor.defaultMilkPrice || defaultMilkPrice, // Use vendor-specific price or global default
     }
 
     const updatedVendors = [...vendors, vendor]
@@ -153,6 +156,7 @@ export default function VendorsPage() {
       email: "",
       address: "",
       notes: "",
+      defaultMilkPrice: defaultMilkPrice,
     })
     setIsAddVendorOpen(false)
 
@@ -182,6 +186,7 @@ export default function VendorsPage() {
       email: newVendor.email || "",
       address: newVendor.address || "",
       notes: newVendor.notes || "",
+      defaultMilkPrice: newVendor.defaultMilkPrice || selectedVendor.defaultMilkPrice || defaultMilkPrice,
     }
 
     const updatedVendors = vendors.map((v) => (v.id === selectedVendor.id ? updatedVendor : v))
@@ -194,6 +199,7 @@ export default function VendorsPage() {
       email: "",
       address: "",
       notes: "",
+      defaultMilkPrice: defaultMilkPrice,
     })
     setSelectedVendor(null)
     setIsEditVendorOpen(false)
@@ -265,12 +271,14 @@ export default function VendorsPage() {
     setCollections(updatedCollections)
     localStorage.setItem("milkCollections", JSON.stringify(updatedCollections))
 
+    // Reset form but keep the vendor ID selected
+    const selectedVendorId = newCollection.vendorId
     setNewCollection({
-      vendorId: "",
+      vendorId: selectedVendorId,
       date: format(new Date(), "yyyy-MM-dd"),
       timeOfDay: "morning",
       quantity: 0,
-      price: defaultMilkPrice,
+      price: getVendorMilkPrice(selectedVendorId), // Use vendor-specific price
       notes: "",
     })
     setIsAddCollectionOpen(false)
@@ -374,6 +382,22 @@ export default function VendorsPage() {
     localStorage.setItem("activityLogs", JSON.stringify(activityLogs))
   }
 
+  // Get vendor-specific milk price or use default
+  const getVendorMilkPrice = (vendorId: string): number => {
+    const vendor = vendors.find((v) => v.id === vendorId)
+    return vendor?.defaultMilkPrice || defaultMilkPrice
+  }
+
+  // Handle vendor selection in collection form
+  const handleVendorSelect = (vendorId: string) => {
+    const vendorPrice = getVendorMilkPrice(vendorId)
+    setNewCollection({
+      ...newCollection,
+      vendorId,
+      price: vendorPrice,
+    })
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center mb-6">
@@ -424,6 +448,7 @@ export default function VendorsPage() {
                         <TableHead>Phone</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Address</TableHead>
+                        <TableHead>Milk Price (KSH)</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -434,6 +459,7 @@ export default function VendorsPage() {
                           <TableCell>{vendor.phone}</TableCell>
                           <TableCell>{vendor.email || "-"}</TableCell>
                           <TableCell>{vendor.address || "-"}</TableCell>
+                          <TableCell>{vendor.defaultMilkPrice?.toFixed(2) || defaultMilkPrice.toFixed(2)}</TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
                               <Button
@@ -447,6 +473,7 @@ export default function VendorsPage() {
                                     email: vendor.email,
                                     address: vendor.address,
                                     notes: vendor.notes,
+                                    defaultMilkPrice: vendor.defaultMilkPrice,
                                   })
                                   setIsEditVendorOpen(true)
                                 }}
@@ -631,6 +658,24 @@ export default function VendorsPage() {
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="defaultMilkPrice" className="text-right">
+                Milk Price (KSH)
+              </Label>
+              <Input
+                id="defaultMilkPrice"
+                type="number"
+                step="0.01"
+                value={newVendor.defaultMilkPrice}
+                onChange={(e) => setNewVendor({ ...newVendor, defaultMilkPrice: Number(e.target.value) })}
+                className="col-span-3"
+              />
+              {defaultMilkPrice > 0 && (
+                <div className="col-span-3 col-start-2 text-sm text-gray-500">
+                  Current default price: KSH {defaultMilkPrice.toFixed(2)}
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="notes" className="text-right">
                 Notes
               </Label>
@@ -706,6 +751,24 @@ export default function VendorsPage() {
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-defaultMilkPrice" className="text-right">
+                Milk Price (KSH)
+              </Label>
+              <Input
+                id="edit-defaultMilkPrice"
+                type="number"
+                step="0.01"
+                value={newVendor.defaultMilkPrice}
+                onChange={(e) => setNewVendor({ ...newVendor, defaultMilkPrice: Number(e.target.value) })}
+                className="col-span-3"
+              />
+              {defaultMilkPrice > 0 && (
+                <div className="col-span-3 col-start-2 text-sm text-gray-500">
+                  Current default price: KSH {defaultMilkPrice.toFixed(2)}
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="edit-notes" className="text-right">
                 Notes
               </Label>
@@ -769,10 +832,7 @@ export default function VendorsPage() {
               <Label htmlFor="vendor" className="text-right">
                 Vendor*
               </Label>
-              <Select
-                value={newCollection.vendorId}
-                onValueChange={(value) => setNewCollection({ ...newCollection, vendorId: value })}
-              >
+              <Select value={newCollection.vendorId} onValueChange={handleVendorSelect}>
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Select vendor" />
                 </SelectTrigger>
@@ -846,9 +906,9 @@ export default function VendorsPage() {
                 onChange={(e) => setNewCollection({ ...newCollection, price: Number.parseFloat(e.target.value) })}
                 className="col-span-3"
               />
-              {defaultMilkPrice > 0 && (
+              {newCollection.vendorId && (
                 <div className="col-span-3 col-start-2 text-sm text-gray-500">
-                  Current default price: KSH {defaultMilkPrice.toFixed(2)}
+                  Vendor's default price: KSH {getVendorMilkPrice(newCollection.vendorId).toFixed(2)}
                 </div>
               )}
             </div>
@@ -905,10 +965,7 @@ export default function VendorsPage() {
               <Label htmlFor="edit-vendor" className="text-right">
                 Vendor*
               </Label>
-              <Select
-                value={newCollection.vendorId}
-                onValueChange={(value) => setNewCollection({ ...newCollection, vendorId: value })}
-              >
+              <Select value={newCollection.vendorId} onValueChange={handleVendorSelect}>
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Select vendor" />
                 </SelectTrigger>
@@ -982,9 +1039,9 @@ export default function VendorsPage() {
                 onChange={(e) => setNewCollection({ ...newCollection, price: Number.parseFloat(e.target.value) })}
                 className="col-span-3"
               />
-              {defaultMilkPrice > 0 && (
+              {newCollection.vendorId && (
                 <div className="col-span-3 col-start-2 text-sm text-gray-500">
-                  Current default price: KSH {defaultMilkPrice.toFixed(2)}
+                  Vendor's default price: KSH {getVendorMilkPrice(newCollection.vendorId).toFixed(2)}
                 </div>
               )}
             </div>

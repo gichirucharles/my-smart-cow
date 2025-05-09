@@ -11,6 +11,7 @@ interface User {
   email: string
   role: "user" | "admin"
   lastLoginAt: number
+  isAdmin?: boolean
 }
 
 interface AuthContextType {
@@ -21,6 +22,7 @@ interface AuthContextType {
   emergencyAccess: () => void
   isOnline: boolean
   pendingChanges: number
+  isInitialized: boolean
 }
 
 // Create context with default values
@@ -32,6 +34,7 @@ const AuthContext = createContext<AuthContextType>({
   emergencyAccess: () => {},
   isOnline: true,
   pendingChanges: 0,
+  isInitialized: false,
 })
 
 // Default user for emergency access
@@ -43,15 +46,30 @@ const defaultUser: User = {
   lastLoginAt: Date.now(),
 }
 
+// List of admin emails
+const ADMIN_EMAILS = [
+  "charlesmuiruri024@gmail.com",
+  // Add any other admin emails here
+]
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isOnline, setIsOnline] = useState<boolean>(true)
   const [pendingChanges, setPendingChanges] = useState<number>(0)
+  const [isInitialized, setIsInitialized] = useState<boolean>(false)
 
   // Try to load user from secure storage on mount
   useEffect(() => {
-    console.log("AuthProvider: Initializing")
     try {
+      console.log("AuthProvider: Initializing")
+
+      // Check if storage is available
+      if (!SecureStorage.isAvailable()) {
+        console.log("AuthProvider: Storage not available")
+        setIsInitialized(true)
+        return
+      }
+
       const storedUser = SecureStorage.getItem("user", null)
       if (storedUser) {
         console.log("AuthProvider: Found stored user")
@@ -59,40 +77,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         console.log("AuthProvider: No stored user found")
       }
-    } catch (error) {
-      console.error("AuthProvider: Error loading user", error)
-    }
 
-    // Initialize online/offline detection
+      // Initialize online/offline detection
+      if (typeof navigator !== "undefined") {
+        setIsOnline(navigator.onLine)
+      }
+
+      setIsInitialized(true)
+    } catch (error) {
+      console.error("AuthProvider: Error initializing", error)
+      setIsInitialized(true)
+    }
+  }, [])
+
+  // Set up event listeners for online/offline events
+  useEffect(() => {
+    if (!isInitialized) return
+
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
 
-    // Set initial online status
-    if (typeof navigator !== "undefined") {
-      setIsOnline(navigator.onLine)
-    }
-
-    // Add event listeners for online/offline events
     if (typeof window !== "undefined") {
       window.addEventListener("online", handleOnline)
       window.addEventListener("offline", handleOffline)
     }
-
-    // Set up interval to check pending changes (simplified for now)
-    const interval = setInterval(() => {
-      // In a real app, this would check the sync queue
-      const pendingItems = SecureStorage.getItem("pendingChanges", [])
-      setPendingChanges(pendingItems.length)
-    }, 5000)
 
     return () => {
       if (typeof window !== "undefined") {
         window.removeEventListener("online", handleOnline)
         window.removeEventListener("offline", handleOffline)
       }
-      clearInterval(interval)
     }
-  }, [])
+  }, [isInitialized])
+
+  // Set up interval to check pending changes
+  useEffect(() => {
+    if (!isInitialized) return
+
+    const interval = setInterval(() => {
+      try {
+        // In a real app, this would check the sync queue
+        const pendingItems = SecureStorage.getItem("pendingChanges", [])
+        setPendingChanges(Array.isArray(pendingItems) ? pendingItems.length : 0)
+      } catch (error) {
+        console.error("Error checking pending changes:", error)
+      }
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [isInitialized])
+
+  // Function to check if an email is an admin email
+  const isAdminEmail = (email: string): boolean => {
+    // Check if the email is in the admin emails list
+    if (ADMIN_EMAILS.includes(email.toLowerCase())) {
+      return true
+    }
+
+    // Also check if the email contains "admin" for backward compatibility
+    return email.toLowerCase().includes("admin")
+  }
 
   // Login function with offline support
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -104,21 +148,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Online login - would normally call your API
         // For demo, we'll simulate a successful login
 
-        // Create a user object
+        // Check if this is an admin email
+        const isAdmin = isAdminEmail(email)
+        console.log("Is admin email:", isAdmin)
+
+        // Create a user object with explicit isAdmin flag
         const user: User = {
           id: "user-" + Date.now(),
           name: email.split("@")[0],
           email,
-          role: "user",
+          role: isAdmin ? "admin" : "user",
           lastLoginAt: Date.now(),
+          isAdmin: isAdmin, // Explicitly set isAdmin flag
         }
+
+        console.log("User created with isAdmin:", isAdmin)
 
         // Store user securely
         setUser(user)
         SecureStorage.setItem("user", user)
 
         // Also store credentials securely for offline login
-        // In a real app, you'd store a token instead of the password
         SecureStorage.setItem("credentials", { email, passwordHash: hashPassword(password) })
 
         console.log("AuthProvider: Online login successful")
@@ -157,13 +207,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Create a simple user object
+      // Check if this is an admin email
+      const isAdmin = isAdminEmail(email)
+
+      // Create a user object
       const user: User = {
         id: "user-" + Date.now(),
         name,
         email,
-        role: "user",
+        role: isAdmin ? "admin" : "user",
         lastLoginAt: Date.now(),
+        isAdmin: isAdmin,
       }
 
       // Store user securely
@@ -196,6 +250,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     SecureStorage.setItem("user", defaultUser)
   }
 
+  // If not initialized yet, show a simple loading state
+  if (!isInitialized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Initializing Maziwa Smart...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -206,6 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         emergencyAccess,
         isOnline,
         pendingChanges,
+        isInitialized,
       }}
     >
       {children}

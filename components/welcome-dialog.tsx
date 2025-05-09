@@ -71,8 +71,10 @@ export function WelcomeDialog() {
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
             <Confetti className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <DialogTitle className="text-center text-xl mt-4">Welcome to My Smart Cow!</DialogTitle>
-          <DialogDescription className="text-center">Congratulations on joining our platform!</DialogDescription>
+          <DialogTitle className="text-center text-xl mt-4">Welcome to My Smart Cow, {user?.name || ""}!</DialogTitle>
+          <DialogDescription className="text-center">
+            {user?.farmName ? `${user.farmName} - ` : ""}Congratulations on joining our platform!
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4 text-center">
           <p>

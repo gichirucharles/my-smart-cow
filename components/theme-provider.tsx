@@ -26,27 +26,35 @@ const initialState: ThemeProviderState = {
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
-function ThemeProviderComponent({
+export function ThemeProvider({
   children,
   defaultTheme = "system",
   storageKey = "theme",
   ...props
 }: ThemeProviderProps) {
-  // Initialize with defaultTheme, then update from localStorage in useEffect
+  // Initialize with defaultTheme
   const [theme, setTheme] = useState<Theme>(defaultTheme)
+  const [mounted, setMounted] = useState(false)
 
   // Load theme from localStorage on client-side only
   useEffect(() => {
-    const savedTheme = typeof window !== "undefined" ? (localStorage.getItem(storageKey) as Theme | null) : null
-
-    if (savedTheme) {
-      setTheme(savedTheme)
+    setMounted(true)
+    try {
+      const savedTheme = localStorage.getItem(storageKey) as Theme | null
+      if (savedTheme) {
+        setTheme(savedTheme)
+      } else if (defaultTheme === "system") {
+        const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+        setTheme(systemTheme)
+      }
+    } catch (error) {
+      console.error("Failed to get theme from localStorage:", error)
     }
-  }, [storageKey])
+  }, [defaultTheme, storageKey])
 
   // Apply theme class to document
   useEffect(() => {
-    if (typeof window === "undefined") return
+    if (!mounted) return
 
     const root = window.document.documentElement
     root.classList.remove("light", "dark")
@@ -57,16 +65,23 @@ function ThemeProviderComponent({
     } else {
       root.classList.add(theme)
     }
-  }, [theme])
+  }, [theme, mounted])
 
   const value = {
     theme,
     setTheme: (theme: Theme) => {
-      if (typeof window !== "undefined") {
+      try {
         localStorage.setItem(storageKey, theme)
+      } catch (error) {
+        console.error("Failed to set theme in localStorage:", error)
       }
       setTheme(theme)
     },
+  }
+
+  // Prevent flash of incorrect theme
+  if (!mounted) {
+    return <>{children}</>
   }
 
   return (
@@ -82,14 +97,4 @@ export const useTheme = () => {
     throw new Error("useTheme must be used within a ThemeProvider")
   }
   return context
-}
-
-// Add these exports to make it compatible with next-themes
-export const ThemeProvider = Object.assign(ThemeProviderComponent, {
-  Provider: ThemeProviderComponent,
-})
-
-export function useThemeMode() {
-  const { theme, setTheme } = useTheme()
-  return { theme, setTheme }
 }

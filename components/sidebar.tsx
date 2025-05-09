@@ -5,24 +5,18 @@ import type React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  BarChart3,
   MilkIcon as Cow,
-  CreditCard,
   FileText,
   Home,
-  Leaf,
   Menu,
   Milk,
-  Package,
   Settings,
-  ShoppingCart,
   Users,
   X,
   HelpCircle,
-  Baby,
-  Stethoscope,
   History,
   DollarSign,
+  LogInIcon as Subscription,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -31,12 +25,16 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/components/auth-provider"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useState, useEffect } from "react"
+import { Copyright } from "@/components/copyright"
 
 interface NavItem {
   title: string
   href: string
   icon: React.ReactNode
   disabled?: boolean
+  subItems?: { title: string; href: string }[]
+  hidden?: boolean
+  adminOnly?: boolean
 }
 
 export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
@@ -44,6 +42,11 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
   const { user, logout } = useAuth()
   const [open, setOpen] = useState(false)
   const [inactiveUsers, setInactiveUsers] = useState<string[]>([])
+
+  // Add this near the top of the Sidebar component function
+  useEffect(() => {
+    console.log("Sidebar: User admin status:", user?.isAdmin)
+  }, [user])
 
   useEffect(() => {
     // Check for inactive users (those who haven't logged in for 30 days)
@@ -63,6 +66,9 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
     }
   }, [user])
 
+  // Fix the navItems array to include admin items directly below Reports
+  // Replace the current navItems array with this updated version:
+
   const navItems: NavItem[] = [
     {
       title: "Dashboard",
@@ -75,59 +81,80 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
       icon: <Milk className="h-5 w-5" />,
     },
     {
-      title: "Cows",
+      title: "Cow Management",
       href: "/cows",
       icon: <Cow className="h-5 w-5" />,
-    },
-    {
-      title: "Calves",
-      href: "/calves",
-      icon: <Baby className="h-5 w-5" />,
-    },
-    {
-      title: "Feeds & Concentrates",
-      href: "/feeds",
-      icon: <Leaf className="h-5 w-5" />,
-    },
-    {
-      title: "Cow Feeding",
-      href: "/cow-feeding",
-      icon: <Package className="h-5 w-5" />,
-    },
-    {
-      title: "Veterinary",
-      href: "/veterinary",
-      icon: <Stethoscope className="h-5 w-5" />,
-    },
-    {
-      title: "Vet Visits",
-      href: "/vet-visits",
-      icon: <FileText className="h-5 w-5" />,
+      subItems: [
+        {
+          title: "Cows",
+          href: "/cows",
+        },
+        {
+          title: "Calves",
+          href: "/calves",
+        },
+        {
+          title: "Vendors & Milk",
+          href: "/vendors",
+        },
+      ],
     },
     {
       title: "Expenses",
       href: "/expenses",
       icon: <DollarSign className="h-5 w-5" />,
-    },
-    {
-      title: "Vendors",
-      href: "/vendors",
-      icon: <ShoppingCart className="h-5 w-5" />,
-    },
-    {
-      title: "Milk Pricing",
-      href: "/milk-pricing",
-      icon: <BarChart3 className="h-5 w-5" />,
+      subItems: [
+        {
+          title: "General Expenses",
+          href: "/expenses",
+        },
+      ],
     },
     {
       title: "Reports",
       href: "/reports",
       icon: <FileText className="h-5 w-5" />,
     },
+    // Admin items are now directly in the main navigation array, not in a separate array
+    {
+      title: "Admin Dashboard",
+      href: "/admin",
+      icon: <Users className="h-5 w-5" />,
+      // This item is for admin users only
+      adminOnly: true,
+    },
+    {
+      title: "System Settings",
+      href: "/admin/settings",
+      icon: <Settings className="h-5 w-5" />,
+      // This item is for admin users only
+      adminOnly: true,
+    },
+    {
+      title: "System Administration",
+      href: "/settings/admin",
+      icon: <Settings className="h-5 w-5" />,
+      // This item is for admin users only
+      adminOnly: true,
+    },
     {
       title: "Subscription",
       href: "/subscription",
-      icon: <CreditCard className="h-5 w-5" />,
+      icon: <Subscription className="h-5 w-5" />,
+      subItems: [
+        {
+          title: "Plans & Pricing",
+          href: "/pricing",
+        },
+        {
+          title: "Manage Subscription",
+          href: "/subscription",
+        },
+        {
+          title: "Billing",
+          href: "/subscription#billing",
+        },
+      ],
     },
     {
       title: "Payment History",
@@ -136,19 +163,23 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
     },
   ]
 
-  const adminItems: NavItem[] = [
-    {
-      title: "Admin Dashboard",
-      href: "/admin",
-      icon: <Users className="h-5 w-5" />,
-    },
-  ]
-
   const bottomItems: NavItem[] = [
     {
       title: "Settings",
       href: "/settings",
       icon: <Settings className="h-5 w-5" />,
+      subItems: user?.isAdmin
+        ? [
+            {
+              title: "User Settings",
+              href: "/settings",
+            },
+            {
+              title: "System Administration",
+              href: "/settings/admin",
+            },
+          ]
+        : undefined,
     },
     {
       title: "Support",
@@ -178,29 +209,15 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
             </div>
             <ScrollArea className="flex-1">
               <nav className="grid gap-1 px-2 py-4">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
-                      pathname === item.href
-                        ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
-                        : "text-gray-600 dark:text-gray-400",
-                    )}
-                  >
-                    {item.icon}
-                    {item.title}
-                  </Link>
-                ))}
+                {navItems.map((item) => {
+                  // Skip admin-only items if user is not admin
+                  if (item.adminOnly && !user?.isAdmin) {
+                    return null
+                  }
 
-                {user?.isAdmin && (
-                  <>
-                    <div className="my-2 border-t border-gray-200 dark:border-gray-800"></div>
-                    {adminItems.map((item) => (
+                  return (
+                    <div key={item.href}>
                       <Link
-                        key={item.href}
                         href={item.href}
                         onClick={() => setOpen(false)}
                         className={cn(
@@ -213,28 +230,67 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
                         {item.icon}
                         {item.title}
                       </Link>
-                    ))}
-                  </>
-                )}
+                      {item.subItems && (
+                        <div className="ml-6 mt-1 space-y-1">
+                          {item.subItems.map((subItem) => (
+                            <Link
+                              key={subItem.href}
+                              href={subItem.href}
+                              onClick={() => setOpen(false)}
+                              className={cn(
+                                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                                pathname === subItem.href
+                                  ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                                  : "text-gray-600 dark:text-gray-400",
+                              )}
+                            >
+                              {subItem.title}
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </nav>
             </ScrollArea>
             <div className="border-t border-gray-200 dark:border-gray-800">
               <nav className="grid gap-1 px-2 py-4">
                 {bottomItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
-                      pathname === item.href
-                        ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
-                        : "text-gray-600 dark:text-gray-400",
+                  <div key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                        pathname === item.href && !item.subItems
+                          ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                          : "text-gray-600 dark:text-gray-400",
+                      )}
+                    >
+                      {item.icon}
+                      {item.title}
+                    </Link>
+                    {item.subItems && (
+                      <div className="ml-6 mt-1 space-y-1">
+                        {item.subItems.map((subItem) => (
+                          <Link
+                            key={subItem.href}
+                            href={subItem.href}
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                              pathname === subItem.href
+                                ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                                : "text-gray-600 dark:text-gray-400",
+                            )}
+                          >
+                            {subItem.title}
+                          </Link>
+                        ))}
+                      </div>
                     )}
-                  >
-                    {item.icon}
-                    {item.title}
-                  </Link>
+                  </div>
                 ))}
                 <div className="flex items-center justify-between px-3 py-2">
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Theme</span>
@@ -272,28 +328,15 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
         </div>
         <ScrollArea className="flex-1">
           <nav className="grid gap-1 px-2 py-4">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
-                  pathname === item.href
-                    ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
-                    : "text-gray-600 dark:text-gray-400",
-                )}
-              >
-                {item.icon}
-                {item.title}
-              </Link>
-            ))}
+            {navItems.map((item) => {
+              // Skip admin-only items if user is not admin
+              if (item.adminOnly && !user?.isAdmin) {
+                return null
+              }
 
-            {user?.isAdmin && (
-              <>
-                <div className="my-2 border-t border-gray-200 dark:border-gray-800"></div>
-                {adminItems.map((item) => (
+              return (
+                <div key={item.href}>
                   <Link
-                    key={item.href}
                     href={item.href}
                     className={cn(
                       "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
@@ -305,27 +348,64 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
                     {item.icon}
                     {item.title}
                   </Link>
-                ))}
-              </>
-            )}
+                  {item.subItems && (
+                    <div className="ml-6 mt-1 space-y-1">
+                      {item.subItems.map((subItem) => (
+                        <Link
+                          key={subItem.href}
+                          href={subItem.href}
+                          className={cn(
+                            "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                            pathname === subItem.href
+                              ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                              : "text-gray-600 dark:text-gray-400",
+                          )}
+                        >
+                          {subItem.title}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </nav>
         </ScrollArea>
         <div className="border-t border-gray-200 dark:border-gray-800">
           <nav className="grid gap-1 px-2 py-4">
             {bottomItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
-                  pathname === item.href
-                    ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
-                    : "text-gray-600 dark:text-gray-400",
+              <div key={item.href}>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                    pathname === item.href && !item.subItems
+                      ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                      : "text-gray-600 dark:text-gray-400",
+                  )}
+                >
+                  {item.icon}
+                  {item.title}
+                </Link>
+                {item.subItems && (
+                  <div className="ml-6 mt-1 space-y-1">
+                    {item.subItems.map((subItem) => (
+                      <Link
+                        key={subItem.href}
+                        href={subItem.href}
+                        className={cn(
+                          "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-emerald-800/20 dark:hover:text-emerald-50",
+                          pathname === subItem.href
+                            ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-800/30 dark:text-emerald-50"
+                            : "text-gray-600 dark:text-gray-400",
+                        )}
+                      >
+                        {subItem.title}
+                      </Link>
+                    ))}
+                  </div>
                 )}
-              >
-                {item.icon}
-                {item.title}
-              </Link>
+              </div>
             ))}
             <div className="flex items-center justify-between px-3 py-2">
               <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Theme</span>
@@ -372,6 +452,7 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
             </div>
           </div>
         )}
+        <Copyright />
       </div>
     </>
   )

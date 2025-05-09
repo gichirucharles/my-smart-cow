@@ -1014,7 +1014,20 @@ export default function ReportsPage() {
           )}
 
           <div className="flex gap-2 mt-auto">
-            <Button variant="outline" onClick={() => setExportDialogOpen(true)} className="flex items-center">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedReports({
+                  milkProduction: true,
+                  vetCosts: true,
+                  feedCosts: true,
+                  vendorCollections: true,
+                  financialSummary: true,
+                })
+                exportReports()
+              }}
+              className="flex items-center"
+            >
               <Download className="mr-2 h-4 w-4" /> Export All Reports
             </Button>
           </div>
@@ -1096,7 +1109,16 @@ export default function ReportsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportCurrentTabReport("milk")}
+                onClick={() => {
+                  setSelectedReports({
+                    milkProduction: true,
+                    vetCosts: false,
+                    feedCosts: false,
+                    vendorCollections: false,
+                    financialSummary: false,
+                  })
+                  exportReports()
+                }}
                 className="flex items-center"
               >
                 <Download className="mr-2 h-4 w-4" /> Export
@@ -1180,7 +1202,16 @@ export default function ReportsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportCurrentTabReport("vet")}
+                onClick={() => {
+                  setSelectedReports({
+                    milkProduction: false,
+                    vetCosts: true,
+                    feedCosts: false,
+                    vendorCollections: false,
+                    financialSummary: false,
+                  })
+                  exportReports()
+                }}
                 className="flex items-center"
               >
                 <Download className="mr-2 h-4 w-4" /> Export
@@ -1197,7 +1228,16 @@ export default function ReportsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportCurrentTabReport("feed")}
+                onClick={() => {
+                  setSelectedReports({
+                    milkProduction: false,
+                    vetCosts: false,
+                    feedCosts: true,
+                    vendorCollections: false,
+                    financialSummary: false,
+                  })
+                  exportReports()
+                }}
                 className="flex items-center"
               >
                 <Download className="mr-2 h-4 w-4" /> Export
@@ -1214,7 +1254,16 @@ export default function ReportsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportCurrentTabReport("vendors")}
+                onClick={() => {
+                  setSelectedReports({
+                    milkProduction: false,
+                    vetCosts: false,
+                    feedCosts: false,
+                    vendorCollections: true,
+                    financialSummary: false,
+                  })
+                  exportReports()
+                }}
                 className="flex items-center"
               >
                 <Download className="mr-2 h-4 w-4" /> Export
@@ -1231,7 +1280,16 @@ export default function ReportsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportCurrentTabReport("summary")}
+                onClick={() => {
+                  setSelectedReports({
+                    milkProduction: false,
+                    vetCosts: false,
+                    feedCosts: false,
+                    vendorCollections: false,
+                    financialSummary: true,
+                  })
+                  exportReports()
+                }}
                 className="flex items-center"
               >
                 <Download className="mr-2 h-4 w-4" /> Export

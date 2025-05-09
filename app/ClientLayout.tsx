@@ -2,31 +2,25 @@
 
 import type React from "react"
 
-import { useAuth } from "@/components/auth-provider"
-import { BasicSidebar } from "@/components/basic-sidebar"
-import { SyncStatus } from "@/components/sync-status"
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { ThemeProvider } from "@/components/theme-provider"
+import { AuthProvider } from "@/components/auth-provider"
+import { useEffect, useState } from "react"
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth()
-  const router = useRouter()
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    if (!user) {
-      router.push("/login")
-    }
-  }, [user, router])
+    setMounted(true)
+  }, [])
 
-  if (!user) {
+  // Prevent flash of unstyled content
+  if (!mounted) {
     return null
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      <BasicSidebar />
-      <div className="ml-64 p-6 flex-1">{children}</div>
-      <SyncStatus />
-    </div>
+    <ThemeProvider defaultTheme="light" storageKey="maziwa-smart-theme">
+      <AuthProvider>{children}</AuthProvider>
+    </ThemeProvider>
   )
 }

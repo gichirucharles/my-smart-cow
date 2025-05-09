@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { Copyright } from "@/components/copyright"
 import {
   Home,
   Milk,
@@ -79,6 +80,7 @@ export function BasicSidebar() {
           <LogOut className="mr-2 h-4 w-4" />
           Logout
         </button>
+        <Copyright />
       </div>
     </div>
   )

@@ -6,9 +6,20 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Save, Edit, Trash2, MilkIcon as Cow, AlertTriangle, Shield, Baby } from "lucide-react"
-// Remove this import
-//import { format, addDays, differenceInDays, parseISO } from "date-fns"
+import {
+  ArrowLeft,
+  Save,
+  Edit,
+  Trash2,
+  MilkIcon as Cow,
+  AlertTriangle,
+  Shield,
+  Baby,
+  Plus,
+  Calendar,
+  Users,
+} from "lucide-react"
+import { format, addDays, differenceInDays, parseISO } from "date-fns"
 import {
   Dialog,
   DialogContent,
@@ -24,31 +35,6 @@ import { Switch } from "@/components/ui/switch"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-
-// Helper functions to replace date-fns
-const formatDate = (date, formatStr) => {
-  if (formatStr === "yyyy-MM-dd") {
-    return date.toISOString().split("T")[0]
-  }
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: formatStr.includes("MMM") ? "short" : "2-digit",
-    day: "2-digit",
-  })
-}
-
-const parseISO = (dateStr) => new Date(dateStr)
-
-const addDays = (date, days) => {
-  const newDate = new Date(date)
-  newDate.setDate(date.getDate() + days)
-  return newDate
-}
-
-const differenceInDays = (date1, date2) => {
-  const diffTime = date1.getTime() - date2.getTime()
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-}
 
 // Types
 interface CowData {
@@ -66,7 +52,7 @@ interface CowData {
   purchasePrice?: number
   notes?: string
   expectedDeliveryDate?: string
-  aiDates: string[]
+  aiDates: AIRecord[]
   healthStatus: "healthy" | "sick" | "treatment" | "quarantine"
   lastHealthCheck?: string
   insurance?: {
@@ -78,6 +64,16 @@ interface CowData {
     coverageAmount?: number
     premium?: number
   }
+  nextHeatDate?: string
+  pregnancyCheckDate?: string
+}
+
+interface AIRecord {
+  date: string
+  veterinary: string
+  breed: string
+  cost: number
+  time: string
 }
 
 // Validation function for lactation status combinations
@@ -106,7 +102,7 @@ export default function CowsPage() {
   const [tagNumber, setTagNumber] = useState("")
   const [name, setName] = useState("")
   const [breed, setBreed] = useState("")
-  const [dateOfBirth, setDateOfBirth] = useState(formatDate(new Date(), "yyyy-MM-dd"))
+  const [dateOfBirth, setDateOfBirth] = useState(format(new Date(), "yyyy-MM-dd"))
   const [lactationStatus, setLactationStatus] = useState<{ lactating: boolean; dry: boolean; inCalf: boolean }>({
     lactating: false,
     dry: true,
@@ -117,8 +113,12 @@ export default function CowsPage() {
   const [purchasePrice, setPurchasePrice] = useState("")
   const [notes, setNotes] = useState("")
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("")
-  const [aiDates, setAiDates] = useState<string[]>([])
-  const [newAiDate, setNewAiDate] = useState(formatDate(new Date(), "yyyy-MM-dd"))
+  const [aiDates, setAiDates] = useState<AIRecord[]>([])
+  const [newAiDate, setNewAiDate] = useState(format(new Date(), "yyyy-MM-dd"))
+  const [newAiVeterinary, setNewAiVeterinary] = useState("")
+  const [newAiBreed, setNewAiBreed] = useState("")
+  const [newAiCost, setNewAiCost] = useState("")
+  const [newAiTime, setNewAiTime] = useState("")
   const [healthStatus, setHealthStatus] = useState<"healthy" | "sick" | "treatment" | "quarantine">("healthy")
   const [lastHealthCheck, setLastHealthCheck] = useState("")
   const [isInsured, setIsInsured] = useState(false)
@@ -128,6 +128,8 @@ export default function CowsPage() {
   const [insuranceEndDate, setInsuranceEndDate] = useState("")
   const [coverageAmount, setCoverageAmount] = useState("")
   const [premium, setPremium] = useState("")
+  const [nextHeatDate, setNextHeatDate] = useState("")
+  const [pregnancyCheckDate, setPregnancyCheckDate] = useState("")
   const [editingCow, setEditingCow] = useState<CowData | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -266,6 +268,8 @@ export default function CowsPage() {
               healthStatus,
               lastHealthCheck,
               insurance,
+              nextHeatDate,
+              pregnancyCheckDate,
             }
           : c,
       )
@@ -288,6 +292,8 @@ export default function CowsPage() {
         healthStatus,
         lastHealthCheck: lastHealthCheck || undefined,
         insurance,
+        nextHeatDate: nextHeatDate || undefined,
+        pregnancyCheckDate: pregnancyCheckDate || undefined,
       }
 
       const updatedCows = [...cows, cow]
@@ -303,7 +309,7 @@ export default function CowsPage() {
     setTagNumber("")
     setName("")
     setBreed("")
-    setDateOfBirth(formatDate(new Date(), "yyyy-MM-dd"))
+    setDateOfBirth(format(new Date(), "yyyy-MM-dd"))
     setLactationStatus({ lactating: false, dry: true, inCalf: false })
     setLactationStatusError(null)
     setPurchaseDate("")
@@ -311,7 +317,11 @@ export default function CowsPage() {
     setNotes("")
     setExpectedDeliveryDate("")
     setAiDates([])
-    setNewAiDate(formatDate(new Date(), "yyyy-MM-dd"))
+    setNewAiDate(format(new Date(), "yyyy-MM-dd"))
+    setNewAiVeterinary("")
+    setNewAiBreed("")
+    setNewAiCost("")
+    setNewAiTime("")
     setHealthStatus("healthy")
     setLastHealthCheck("")
     setIsInsured(false)
@@ -321,6 +331,8 @@ export default function CowsPage() {
     setInsuranceEndDate("")
     setCoverageAmount("")
     setPremium("")
+    setNextHeatDate("")
+    setPregnancyCheckDate("")
     setEditingCow(null)
   }
 
@@ -348,6 +360,8 @@ export default function CowsPage() {
     setAiDates(cow.aiDates || [])
     setHealthStatus(cow.healthStatus)
     setLastHealthCheck(cow.lastHealthCheck || "")
+    setNextHeatDate(cow.nextHeatDate || "")
+    setPregnancyCheckDate(cow.pregnancyCheckDate || "")
 
     // Set insurance data
     if (cow.insurance) {
@@ -372,14 +386,37 @@ export default function CowsPage() {
   }
 
   const addAiDate = () => {
-    if (!newAiDate) return
-    setAiDates([...aiDates, newAiDate])
-    setNewAiDate(formatDate(new Date(), "yyyy-MM-dd"))
+    if (!newAiDate || !newAiVeterinary || !newAiBreed) return
+
+    const newAiRecord: AIRecord = {
+      date: newAiDate,
+      veterinary: newAiVeterinary,
+      breed: newAiBreed,
+      cost: Number(newAiCost) || 0,
+      time: newAiTime || format(new Date(), "HH:mm"),
+    }
+
+    setAiDates([...aiDates, newAiRecord])
+
+    // Reset AI form fields
+    setNewAiDate(format(new Date(), "yyyy-MM-dd"))
+    setNewAiVeterinary("")
+    setNewAiBreed("")
+    setNewAiCost("")
+    setNewAiTime("")
 
     // Auto-calculate expected delivery date (283 days from AI date)
-    const aiDate = new Date(newAiDate)
+    const aiDate = parseISO(newAiDate)
     const deliveryDate = addDays(aiDate, 283) // Average gestation period for cows
-    setExpectedDeliveryDate(formatDate(deliveryDate, "yyyy-MM-dd"))
+    setExpectedDeliveryDate(format(deliveryDate, "yyyy-MM-dd"))
+
+    // Calculate pregnancy check date (4 months after AI)
+    const pregnancyCheckDate = addDays(aiDate, 120) // 4 months after AI
+    setPregnancyCheckDate(format(pregnancyCheckDate, "yyyy-MM-dd"))
+
+    // Calculate next possible heat date (21 days after AI if not successful)
+    const nextHeatDate = addDays(aiDate, 21) // 21 days cycle
+    setNextHeatDate(format(nextHeatDate, "yyyy-MM-dd"))
 
     // If cow is not already marked as in-calf, update status
     if (!lactationStatus.inCalf) {
@@ -398,6 +435,8 @@ export default function CowsPage() {
     // If we removed the last AI date and there are no more, clear the expected delivery date
     if (updatedDates.length === 0) {
       setExpectedDeliveryDate("")
+      setPregnancyCheckDate("")
+      setNextHeatDate("")
       // Also update in-calf status if there are no more AI dates
       setLactationStatus({
         ...lactationStatus,
@@ -405,9 +444,20 @@ export default function CowsPage() {
       })
     } else {
       // Recalculate based on the most recent AI date
-      const mostRecentAiDate = new Date(updatedDates[updatedDates.length - 1])
+      const mostRecentAiRecord = updatedDates[updatedDates.length - 1]
+      const mostRecentAiDate = parseISO(mostRecentAiRecord.date)
+
+      // Update expected delivery date
       const deliveryDate = addDays(mostRecentAiDate, 283)
-      setExpectedDeliveryDate(formatDate(deliveryDate, "yyyy-MM-dd"))
+      setExpectedDeliveryDate(format(deliveryDate, "yyyy-MM-dd"))
+
+      // Update pregnancy check date
+      const pregnancyCheckDate = addDays(mostRecentAiDate, 120)
+      setPregnancyCheckDate(format(pregnancyCheckDate, "yyyy-MM-dd"))
+
+      // Update next heat date
+      const nextHeatDate = addDays(mostRecentAiDate, 21)
+      setNextHeatDate(format(nextHeatDate, "yyyy-MM-dd"))
     }
   }
 
@@ -427,7 +477,7 @@ export default function CowsPage() {
   // Calculate cows with upcoming deliveries (within 30 days)
   const upcomingDeliveries = inCalfCows.filter((cow) => {
     if (!cow.expectedDeliveryDate) return false
-    const deliveryDate = new Date(cow.expectedDeliveryDate)
+    const deliveryDate = parseISO(cow.expectedDeliveryDate)
     const daysUntilDelivery = differenceInDays(deliveryDate, new Date())
     return daysUntilDelivery >= 0 && daysUntilDelivery <= 30
   })
@@ -435,7 +485,7 @@ export default function CowsPage() {
   // Calculate cows that should be in dry period (60-0 days before delivery)
   const dryPeriodCows = inCalfCows.filter((cow) => {
     if (!cow.expectedDeliveryDate) return false
-    const deliveryDate = new Date(cow.expectedDeliveryDate)
+    const deliveryDate = parseISO(cow.expectedDeliveryDate)
     const daysUntilDelivery = differenceInDays(deliveryDate, new Date())
     return daysUntilDelivery >= 0 && daysUntilDelivery <= 60 && !cow.lactationStatus.dry
   })
@@ -466,6 +516,11 @@ export default function CowsPage() {
           <Button asChild variant="outline">
             <Link href="/calves">
               <Baby className="mr-2 h-4 w-4" /> Manage Calves
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/vendors">
+              <Users className="mr-2 h-4 w-4" /> Vendors & Milk
             </Link>
           </Button>
         </div>
@@ -588,23 +643,23 @@ export default function CowsPage() {
       </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingCow ? "Edit Cow" : "Add New Cow"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="tagNumber">Tag Number</Label>
+                <Label htmlFor="tagNumber">Tag Number / Name*</Label>
                 <Input
                   id="tagNumber"
                   value={tagNumber}
                   onChange={(e) => setTagNumber(e.target.value)}
-                  placeholder="Enter tag number"
+                  placeholder="Enter tag number or name"
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="name">Name</Label>
+                <Label htmlFor="name">Cow Name</Label>
                 <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter cow name" />
               </div>
               <div className="grid gap-2">
@@ -739,52 +794,144 @@ export default function CowsPage() {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label>AI Dates</Label>
-              <div className="flex gap-2">
-                <Input type="date" value={newAiDate} onChange={(e) => setNewAiDate(e.target.value)} />
-                <Button type="button" onClick={addAiDate} className="shrink-0">
-                  Add Date
-                </Button>
+            {/* AI Dates Section */}
+            <div className="border-t pt-4 mt-2">
+              <div className="flex items-center space-x-2 mb-4">
+                <Calendar className="h-5 w-5 text-emerald-600" />
+                <h3 className="text-lg font-medium">AI Records</h3>
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="aiDate">AI Date</Label>
+                  <Input id="aiDate" type="date" value={newAiDate} onChange={(e) => setNewAiDate(e.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="aiTime">Time</Label>
+                  <Input id="aiTime" type="time" value={newAiTime} onChange={(e) => setNewAiTime(e.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="aiVeterinary">Veterinary</Label>
+                  <Input
+                    id="aiVeterinary"
+                    value={newAiVeterinary}
+                    onChange={(e) => setNewAiVeterinary(e.target.value)}
+                    placeholder="Enter veterinary name"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="aiBreed">Breed Used</Label>
+                  <Input
+                    id="aiBreed"
+                    value={newAiBreed}
+                    onChange={(e) => setNewAiBreed(e.target.value)}
+                    placeholder="Enter breed used"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="aiCost">Cost (KSH)</Label>
+                  <Input
+                    id="aiCost"
+                    type="number"
+                    value={newAiCost}
+                    onChange={(e) => setNewAiCost(e.target.value)}
+                    placeholder="Enter cost"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button type="button" onClick={addAiDate} className="w-full">
+                    <Plus className="mr-2 h-4 w-4" /> Add AI Record
+                  </Button>
+                </div>
+              </div>
+
               {aiDates.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {aiDates.map((date, index) => (
-                    <Badge key={index} className="flex items-center gap-1 py-1">
-                      {formatDate(new Date(date), "MMM dd, yyyy")}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-4 w-4 rounded-full"
-                        onClick={() => removeAiDate(index)}
-                      >
-                        ×
-                      </Button>
-                    </Badge>
-                  ))}
+                <div className="mt-2 mb-4">
+                  <h4 className="text-sm font-medium mb-2">AI History</h4>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-3">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2">Date</th>
+                            <th className="text-left py-2">Time</th>
+                            <th className="text-left py-2">Veterinary</th>
+                            <th className="text-left py-2">Breed</th>
+                            <th className="text-left py-2">Cost</th>
+                            <th className="text-right py-2">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aiDates.map((record, index) => (
+                            <tr key={index} className="border-b">
+                              <td className="py-2">{format(parseISO(record.date), "MMM dd, yyyy")}</td>
+                              <td className="py-2">{record.time || "-"}</td>
+                              <td className="py-2">{record.veterinary}</td>
+                              <td className="py-2">{record.breed}</td>
+                              <td className="py-2">{record.cost ? `KSH ${record.cost}` : "-"}</td>
+                              <td className="py-2 text-right">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-red-500"
+                                  onClick={() => removeAiDate(index)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
 
-            {lactationStatus.inCalf && (
-              <div className="grid gap-2">
-                <Label htmlFor="expectedDeliveryDate">Expected Delivery Date</Label>
-                <Input
-                  id="expectedDeliveryDate"
-                  type="date"
-                  value={expectedDeliveryDate}
-                  onChange={(e) => setExpectedDeliveryDate(e.target.value)}
-                  readOnly={aiDates.length > 0}
-                  className={aiDates.length > 0 ? "bg-gray-100 dark:bg-gray-800" : ""}
-                />
-                {aiDates.length > 0 && (
-                  <p className="text-xs text-gray-500">
-                    Auto-calculated based on the most recent AI date (283 days gestation period)
-                  </p>
-                )}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="expectedDeliveryDate">Expected Delivery Date</Label>
+                  <Input
+                    id="expectedDeliveryDate"
+                    type="date"
+                    value={expectedDeliveryDate}
+                    onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                    readOnly={aiDates.length > 0}
+                    className={aiDates.length > 0 ? "bg-gray-100 dark:bg-gray-800" : ""}
+                  />
+                  {aiDates.length > 0 && (
+                    <p className="text-xs text-gray-500">
+                      Auto-calculated based on the most recent AI date (283 days gestation period)
+                    </p>
+                  )}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="nextHeatDate">Next Heat Date (if AI fails)</Label>
+                  <Input
+                    id="nextHeatDate"
+                    type="date"
+                    value={nextHeatDate}
+                    onChange={(e) => setNextHeatDate(e.target.value)}
+                    readOnly={aiDates.length > 0}
+                    className={aiDates.length > 0 ? "bg-gray-100 dark:bg-gray-800" : ""}
+                  />
+                  {aiDates.length > 0 && <p className="text-xs text-gray-500">21 days after the most recent AI</p>}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="pregnancyCheckDate">Pregnancy Check Date</Label>
+                  <Input
+                    id="pregnancyCheckDate"
+                    type="date"
+                    value={pregnancyCheckDate}
+                    onChange={(e) => setPregnancyCheckDate(e.target.value)}
+                    readOnly={aiDates.length > 0}
+                    className={aiDates.length > 0 ? "bg-gray-100 dark:bg-gray-800" : ""}
+                  />
+                  {aiDates.length > 0 && <p className="text-xs text-gray-500">4 months after the most recent AI</p>}
+                </div>
               </div>
-            )}
+            </div>
 
             {/* Insurance Section */}
             <div className="border-t pt-4 mt-2">
@@ -916,7 +1063,7 @@ export default function CowsPage() {
                 <AlertTitle>Dry Period Recommended</AlertTitle>
                 <AlertDescription>
                   {cowForDryPeriod.name} (Tag: {cowForDryPeriod.tagNumber}) is{" "}
-                  {differenceInDays(new Date(cowForDryPeriod.expectedDeliveryDate!), new Date())} days away from
+                  {differenceInDays(parseISO(cowForDryPeriod.expectedDeliveryDate!), new Date())} days away from
                   delivery. It's recommended to start the dry period now to prepare for calving.
                 </AlertDescription>
               </Alert>
@@ -971,8 +1118,7 @@ function CowTable({
             <table className="w-full">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left py-2">Tag Number</th>
-                  <th className="text-left py-2">Name</th>
+                  <th className="text-left py-2">Tag/Name</th>
                   <th className="text-left py-2">Breed</th>
                   <th className="text-left py-2">Age</th>
                   <th className="text-left py-2">Status</th>
@@ -984,7 +1130,7 @@ function CowTable({
               <tbody>
                 {cows.map((cow) => {
                   // Calculate age in years
-                  const birthDate = new Date(cow.dateOfBirth)
+                  const birthDate = parseISO(cow.dateOfBirth)
                   const ageInYears = Math.floor(
                     (new Date().getTime() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000),
                   )
@@ -997,7 +1143,7 @@ function CowTable({
                   // Calculate days until delivery for in-calf cows
                   let daysUntilDelivery = null
                   if (cow.lactationStatus.inCalf && cow.expectedDeliveryDate) {
-                    daysUntilDelivery = differenceInDays(new Date(cow.expectedDeliveryDate), new Date())
+                    daysUntilDelivery = differenceInDays(parseISO(cow.expectedDeliveryDate), new Date())
                   }
 
                   // Get status text
@@ -1006,7 +1152,6 @@ function CowTable({
                   return (
                     <tr key={cow.id} className="border-b">
                       <td className="py-2 font-medium">{cow.tagNumber}</td>
-                      <td className="py-2">{cow.name}</td>
                       <td className="py-2">{cow.breed}</td>
                       <td className="py-2">{ageDisplay}</td>
                       <td className="py-2">

@@ -6,7 +6,13 @@ export const SecureStorage = {
 
       const item = localStorage.getItem(key)
       if (item === null) return defaultValue
-      return JSON.parse(item)
+
+      try {
+        return JSON.parse(item)
+      } catch {
+        // If it's not valid JSON, return the raw value
+        return item
+      }
     } catch (error) {
       console.error(`Error getting item ${key} from storage:`, error)
       return defaultValue
@@ -18,7 +24,8 @@ export const SecureStorage = {
       // Check if we're in a browser environment
       if (typeof window === "undefined") return
 
-      localStorage.setItem(key, JSON.stringify(value))
+      const valueToStore = typeof value === "string" ? value : JSON.stringify(value)
+      localStorage.setItem(key, valueToStore)
     } catch (error) {
       console.error(`Error setting item ${key} in storage:`, error)
     }
@@ -32,6 +39,20 @@ export const SecureStorage = {
       localStorage.removeItem(key)
     } catch (error) {
       console.error(`Error removing item ${key} from storage:`, error)
+    }
+  },
+
+  // Add a method to check if storage is available
+  isAvailable: (): boolean => {
+    try {
+      if (typeof window === "undefined") return false
+
+      const testKey = "__storage_test__"
+      localStorage.setItem(testKey, testKey)
+      localStorage.removeItem(testKey)
+      return true
+    } catch (e) {
+      return false
     }
   },
 }

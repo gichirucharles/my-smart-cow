@@ -1,17 +1,15 @@
 import type React from "react"
-import "@/app/globals.css"
+import "./globals.css"
 import type { Metadata } from "next"
-import { ThemeProvider } from "@/components/theme-provider"
-import ClientLayout from "./ClientLayout"
+import { Inter } from "next/font/google"
+import { SimplifiedSidebar } from "@/components/simplified-sidebar"
+import { ErrorBoundary } from "@/components/error-boundary"
+
+const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Maziwa Smart - Dairy Farm Management",
-  description: "Track and manage your dairy farm operations efficiently",
-  manifest: "/manifest.json",
-  icons: [
-    { rel: "icon", url: "/icons/icon-512x512.png" },
-    { rel: "apple-touch-icon", url: "/icons/icon-512x512.png" },
-  ],
+  title: "Maziwa Smart",
+  description: "Dairy Farm Management",
     generator: 'v0.dev'
 }
 
@@ -21,15 +19,16 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#ffffff" />
-      </head>
-      <body>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <ClientLayout>{children}</ClientLayout>
-        </ThemeProvider>
+    <html lang="en">
+      <body className={inter.className}>
+        <ErrorBoundary>
+          <div className="flex min-h-screen">
+            <div className="hidden md:block fixed h-screen overflow-y-auto">
+              <SimplifiedSidebar />
+            </div>
+            <div className="flex-1 md:ml-64 overflow-y-auto h-screen">{children}</div>
+          </div>
+        </ErrorBoundary>
       </body>
     </html>
   )

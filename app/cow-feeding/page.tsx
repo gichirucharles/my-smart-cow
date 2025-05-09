@@ -57,7 +57,7 @@ export default function CowFeedingPage() {
         </TabsList>
 
         <TabsContent value="daily-feeding" className="space-y-4">
-          <Card>
+          <Card className="max-h-[80vh] overflow-y-auto">
             <CardHeader>
               <CardTitle>Record Daily Feed Consumption</CardTitle>
               <CardDescription>Track how much each cow eats daily</CardDescription>

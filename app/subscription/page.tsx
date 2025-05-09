@@ -104,95 +104,6 @@ const handleSuccessfulPayment = (
   alert(`Payment successful! Your ${plan.name} subscription is now active.`)
 }
 
-// Add this new component for the simplified payment flow
-function SimplePaymentForm({ onClose, plans, currencySymbol, handlePaymentSuccess }) {
-  const [amount, setAmount] = useState(0)
-  const [packageName, setPackageName] = useState("")
-
-  useEffect(() => {
-    const script = document.createElement("script")
-    script.src = "https://checkout.flutterwave.com/v3.js"
-    script.async = true
-    document.body.appendChild(script)
-
-    return () => {
-      // Clean up the script when component unmounts
-      document.body.removeChild(script)
-    }
-  }, [])
-
-  const handlePayment = () => {
-    if (!amount || !packageName) return alert("Please select a package")
-
-    window.FlutterwaveCheckout({
-      public_key: "FLWPUBK_TEST-YOUR-PUBLIC-KEY-HERE", // Replace with your actual public key
-      tx_ref: "TX_" + Date.now(),
-      amount: amount,
-      currency: currencySymbol === "KSH" ? "KES" : currencySymbol,
-      payment_options: "card,mpesa,ussd",
-      customer: {
-        email: "charlesmuiruri024@gmail.com", // This should be replaced with the user's email
-        phonenumber: "0723252885", // This should be replaced with the user's phone
-        name: "Charles Muiruri Gichiru", // This should be replaced with the user's name
-      },
-      customizations: {
-        title: "Smart Cow App",
-        description: `${packageName} Subscription Payment`,
-        logo: "https://yourdomain.com/logo.png", // Optional: Your logo URL
-      },
-      callback: (response) => {
-        console.log("Payment complete", response)
-        // Find the selected plan
-        const selectedPlan = plans.find((p) => p.name === packageName)
-        if (selectedPlan && response.status === "successful") {
-          // Handle successful payment using the existing function
-          handlePaymentSuccess(selectedPlan, response.transaction_id, "flutterwave")
-          onClose()
-        }
-      },
-      onclose: () => {
-        console.log("Payment modal closed")
-      },
-    })
-  }
-
-  return (
-    <div className="p-6">
-      <h1 className="text-xl font-bold mb-4">Choose a Subscription Package</h1>
-
-      <select
-        className="w-full p-3 border rounded mb-4 bg-white dark:bg-gray-800"
-        onChange={(e) => {
-          const value = e.target.value
-          setPackageName(value)
-          const selectedPlan = plans.find((p) => p.name === value)
-          setAmount(selectedPlan ? selectedPlan.price : 0)
-        }}
-      >
-        <option value="">-- Select Package --</option>
-        {plans.map((plan) => (
-          <option key={plan.id} value={plan.name}>
-            {plan.name} ({currencySymbol} {plan.price})
-          </option>
-        ))}
-      </select>
-
-      <div className="flex gap-2 justify-end mt-4">
-        <Button variant="outline" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handlePayment}
-          className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
-          disabled={!amount}
-        >
-          Pay Now
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 // Add this new component for Pesapal payment
 function PesapalPaymentForm({ onClose, plans, currencySymbol, user }) {
   const [selectedPlan, setSelectedPlan] = useState(null)
@@ -828,22 +739,10 @@ export default function SubscriptionPage() {
               </div>
 
               <div className="mt-4">
-                <Tabs defaultValue="flutterwave" className="w-full">
-                  <TabsList className="grid grid-cols-2 mb-4">
-                    <TabsTrigger value="flutterwave">Flutterwave</TabsTrigger>
+                <Tabs defaultValue="pesapal" className="w-full">
+                  <TabsList className="grid grid-cols-1 mb-4">
                     <TabsTrigger value="pesapal">Pesapal</TabsTrigger>
                   </TabsList>
-                  <TabsContent value="flutterwave">
-                    <Button
-                      onClick={() => setSimplePaymentOpen(true)}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
-                    >
-                      Pay with Flutterwave
-                    </Button>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 text-center">
-                      Pay using M-Pesa, Card, or other methods
-                    </p>
-                  </TabsContent>
                   <TabsContent value="pesapal">
                     <Button
                       onClick={() => setPesapalPaymentOpen(true)}
@@ -1251,22 +1150,6 @@ export default function SubscriptionPage() {
               </DialogFooter>
             </>
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Simple Payment Dialog */}
-      <Dialog open={simplePaymentOpen} onOpenChange={setSimplePaymentOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Flutterwave Payment</DialogTitle>
-            <DialogDescription>Choose a subscription package to pay for.</DialogDescription>
-          </DialogHeader>
-          <SimplePaymentForm
-            onClose={() => setSimplePaymentOpen(false)}
-            plans={plans}
-            currencySymbol={currencySymbol}
-            handlePaymentSuccess={handlePaymentSuccess}
-          />
         </DialogContent>
       </Dialog>
 

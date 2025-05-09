@@ -18,15 +18,15 @@ import {
   Clock,
   Settings,
   Bell,
+  UserPlus,
+  AlertCircle,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
-import { useAuth } from "@/components/auth-provider"
 import { useRouter } from "next/navigation"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { format, differenceInDays } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -36,6 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 // Types
 interface UserType {
@@ -84,6 +85,9 @@ export default function AdminDashboardPage() {
   const [inactiveUsers, setInactiveUsers] = useState<UserType[]>([])
   const [userToRemove, setUserToRemove] = useState<UserType | null>(null)
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [adminSetup, setAdminSetup] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   // System settings
   const [systemSettings, setSystemSettings] = useState({
@@ -94,18 +98,27 @@ export default function AdminDashboardPage() {
     maintenanceMode: false,
   })
 
-  const { user, isAdmin } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    // Check if user is admin
-    if (!isAdmin) {
-      router.push("/admin/login")
-      return
-    }
+    if (typeof window === "undefined") return
 
-    // Load users from localStorage
-    if (typeof window !== "undefined") {
+    // Check if user is admin
+    try {
+      const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}")
+      if (!currentUser.isAdmin) {
+        router.push("/")
+        return
+      }
+
+      setIsAdmin(true)
+
+      // Check if admin is set up
+      const users = JSON.parse(localStorage.getItem("users") || "[]")
+      const adminExists = users.some((user: any) => user.isAdmin)
+      setAdminSetup(adminExists)
+
+      // Load users from localStorage
       const savedUsersString = localStorage.getItem("users")
       if (savedUsersString) {
         try {
@@ -163,8 +176,13 @@ export default function AdminDashboardPage() {
       if (Object.keys(savedSettings).length > 0) {
         setSystemSettings(savedSettings)
       }
+
+      setIsLoading(false)
+    } catch (error) {
+      console.error("Error initializing admin dashboard:", error)
+      setIsLoading(false)
     }
-  }, [isAdmin, router])
+  }, [router])
 
   const filteredUsers = users.filter(
     (user) =>
@@ -174,6 +192,8 @@ export default function AdminDashboardPage() {
   )
 
   const toggleAdminStatus = (userId: string) => {
+    if (typeof window === "undefined") return
+
     const updatedUsers = users.map((user) => (user.id === userId ? { ...user, isAdmin: !user.isAdmin } : user))
     setUsers(updatedUsers)
     localStorage.setItem("users", JSON.stringify(updatedUsers))
@@ -196,7 +216,7 @@ export default function AdminDashboardPage() {
   }
 
   const confirmRemoveUser = () => {
-    if (!userToRemove) return
+    if (!userToRemove || typeof window === "undefined") return
 
     const updatedUsers = users.filter((u) => u.id !== userToRemove.id)
     setUsers(updatedUsers)
@@ -215,6 +235,8 @@ export default function AdminDashboardPage() {
   }
 
   const logActivity = (userId: string, userName: string, action: string, details: string) => {
+    if (typeof window === "undefined") return
+
     const newLog: ActivityLog = {
       id: Date.now().toString(),
       userId,
@@ -230,14 +252,40 @@ export default function AdminDashboardPage() {
   }
 
   const saveSystemSettings = () => {
+    if (typeof window === "undefined") return
+
     localStorage.setItem("systemSettings", JSON.stringify(systemSettings))
 
     // Log activity
+    const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}")
     logActivity(
-      user?.id || "system",
-      user?.name || "System",
+      currentUser.id || "system",
+      currentUser.name || "System",
       "System settings updated",
       "Administrator updated system settings",
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading admin dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Alert className="bg-red-50 text-red-800 border-red-200">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Access Denied</AlertTitle>
+          <AlertDescription>You do not have permission to access the admin dashboard.</AlertDescription>
+        </Alert>
+      </div>
     )
   }
 
@@ -322,6 +370,7 @@ export default function AdminDashboardPage() {
       <Tabs defaultValue="users" className="mb-6">
         <TabsList className="bg-emerald-100 dark:bg-emerald-900/30">
           <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="admins">Admin Management</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="activity">Activity Log</TabsTrigger>
           <TabsTrigger value="settings">System Settings</TabsTrigger>
@@ -364,7 +413,9 @@ export default function AdminDashboardPage() {
                     <tbody>
                       {filteredUsers.map((user) => {
                         const lastActive = user.lastActive ? new Date(user.lastActive) : null
-                        const daysSinceActive = lastActive ? differenceInDays(new Date(), lastActive) : null
+                        const daysSinceActive = lastActive
+                          ? Math.floor((new Date().getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24))
+                          : null
                         const isInactive = daysSinceActive && daysSinceActive > 60
 
                         return (
@@ -456,6 +507,91 @@ export default function AdminDashboardPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="admins">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Admin Management</CardTitle>
+                <CardDescription>Manage administrator access to the system</CardDescription>
+              </div>
+              <Button asChild>
+                <Link href="/admin/setup">
+                  <UserPlus className="mr-2 h-4 w-4" /> Invite Admin
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md dark:bg-blue-900/20 dark:border-blue-800">
+                <h3 className="font-medium text-blue-800 dark:text-blue-400">About Admin Access</h3>
+                <p className="text-sm text-blue-700 dark:text-blue-500 mt-1">
+                  Administrators have full access to all system features, including user management, system settings,
+                  and sensitive data. Only grant admin access to trusted individuals.
+                </p>
+              </div>
+
+              <h3 className="text-lg font-medium mb-4">Current Administrators</h3>
+
+              {filteredUsers.filter((user) => user.isAdmin).length === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <Users className="mx-auto h-12 w-12 opacity-30 mb-2" />
+                  <p>No administrators found</p>
+                  <Button asChild className="mt-4">
+                    <Link href="/admin/setup">Set Up Admin Account</Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2">Name</th>
+                        <th className="text-left py-2">Email</th>
+                        <th className="text-left py-2">Added On</th>
+                        <th className="text-left py-2">Last Active</th>
+                        <th className="text-right py-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredUsers
+                        .filter((user) => user.isAdmin)
+                        .map((admin) => (
+                          <tr key={admin.id} className="border-b">
+                            <td className="py-2 flex items-center">
+                              <User className="h-4 w-4 mr-2 text-emerald-600 dark:text-emerald-400" />
+                              {admin.name}
+                            </td>
+                            <td className="py-2">{admin.email}</td>
+                            <td className="py-2">{new Date(admin.createdAt).toLocaleDateString()}</td>
+                            <td className="py-2">
+                              {admin.lastActive ? new Date(admin.lastActive).toLocaleDateString() : "Never"}
+                            </td>
+                            <td className="py-2 text-right">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removeUser(admin.id)}
+                                className="text-xs text-red-500 border-red-500 hover:bg-red-50"
+                                disabled={filteredUsers.filter((user) => user.isAdmin).length <= 1}
+                              >
+                                Remove Admin
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {filteredUsers.filter((user) => user.isAdmin).length <= 1 && (
+                <div className="mt-4 text-sm text-gray-500">
+                  Note: You cannot remove the last administrator from the system.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="payments">
           <Card>
             <CardHeader>
@@ -484,7 +620,7 @@ export default function AdminDashboardPage() {
                     <tbody>
                       {payments.map((payment, index) => (
                         <tr key={index} className="border-b">
-                          <td className="py-2">{format(new Date(payment.date), "MMM dd, yyyy")}</td>
+                          <td className="py-2">{new Date(payment.date).toLocaleDateString()}</td>
                           <td className="py-2">
                             {payment.userName} ({payment.userEmail})
                           </td>
@@ -530,7 +666,7 @@ export default function AdminDashboardPage() {
                         <div className="text-right">
                           <p className="text-sm font-medium">{log.userName}</p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {format(new Date(log.timestamp), "MMM dd, yyyy HH:mm")}
+                            {new Date(log.timestamp).toLocaleString()}
                           </p>
                         </div>
                       </div>
