@@ -1,298 +1,275 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
-import { SecureStorage } from "@/lib/secure-storage"
+import { createContext, useContext, useEffect, useState } from "react"
+import type { User } from "@supabase/supabase-js"
+import { supabase, getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase"
+import { LoadingSpinner } from "./loading-spinner"
 
-// Simplified user type
-interface User {
-  id: string
-  name: string
-  email: string
-  role: "user" | "admin"
-  lastLoginAt: number
-  isAdmin?: boolean
+interface AuthUser extends User {
+  is_admin?: boolean
+  role?: string
+  admin_permissions?: any
+  phone_number?: string
+  full_name?: string
+  county?: string
+  farm_name?: string
 }
 
 interface AuthContextType {
-  user: User | null
-  login: (email: string, password: string) => Promise<boolean>
-  signup: (name: string, email: string, password: string, phone?: string) => Promise<boolean>
-  logout: () => void
-  emergencyAccess: () => void
-  isOnline: boolean
-  pendingChanges: number
-  isInitialized: boolean
+  user: AuthUser | null
+  loading: boolean
+  signIn: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string, userData: any) => Promise<void>
+  signOut: () => Promise<void>
+  isAdmin: boolean
+  supabaseConfigured: boolean
 }
 
-// Create context with default values
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  login: async () => false,
-  signup: async () => false,
-  logout: () => {},
-  emergencyAccess: () => {},
-  isOnline: true,
-  pendingChanges: 0,
-  isInitialized: false,
-})
-
-// Default user for emergency access
-const defaultUser: User = {
-  id: "default-user",
-  name: "Default User",
-  email: "user@example.com",
-  role: "user",
-  lastLoginAt: Date.now(),
-}
-
-// List of admin emails
-const ADMIN_EMAILS = [
-  "charlesmuiruri024@gmail.com",
-  // Add any other admin emails here
-]
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isOnline, setIsOnline] = useState<boolean>(true)
-  const [pendingChanges, setPendingChanges] = useState<number>(0)
-  const [isInitialized, setIsInitialized] = useState<boolean>(false)
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [supabaseConfigured, setSupabaseConfigured] = useState(false)
 
-  // Try to load user from secure storage on mount
+  // Get the appropriate Supabase client
+  const getClient = () => {
+    // Try default client first (from environment variables)
+    if (supabase) {
+      return supabase
+    }
+    // Fall back to settings-based client
+    return getSupabaseClient()
+  }
+
   useEffect(() => {
-    try {
-      console.log("AuthProvider: Initializing")
+    // Check if Supabase is configured
+    const checkConfiguration = () => {
+      const hasEnvClient = !!supabase
+      const hasSettingsClient = isSupabaseConfigured()
+      const configured = hasEnvClient || hasSettingsClient
 
-      // Check if storage is available
-      if (!SecureStorage.isAvailable()) {
-        console.log("AuthProvider: Storage not available")
-        setIsInitialized(true)
+      setSupabaseConfigured(configured)
+
+      if (!configured) {
+        setLoading(false)
         return
       }
 
-      const storedUser = SecureStorage.getItem("user", null)
-      if (storedUser) {
-        console.log("AuthProvider: Found stored user")
-        setUser(storedUser)
-      } else {
-        console.log("AuthProvider: No stored user found")
+      initializeAuth()
+    }
+
+    const initializeAuth = async () => {
+      const client = getClient()
+      if (!client) {
+        setLoading(false)
+        return
       }
 
-      // Initialize online/offline detection
-      if (typeof navigator !== "undefined") {
-        setIsOnline(navigator.onLine)
-      }
+      try {
+        // Get initial session
+        const {
+          data: { session },
+        } = await client.auth.getSession()
+        if (session?.user) {
+          await fetchUserProfile(session.user, client)
+        } else {
+          setLoading(false)
+        }
 
-      setIsInitialized(true)
-    } catch (error) {
-      console.error("AuthProvider: Error initializing", error)
-      setIsInitialized(true)
+        // Listen for auth changes
+        const {
+          data: { subscription },
+        } = client.auth.onAuthStateChange(async (event, session) => {
+          if (session?.user) {
+            await fetchUserProfile(session.user, client)
+          } else {
+            setUser(null)
+            setLoading(false)
+          }
+        })
+
+        return () => subscription.unsubscribe()
+      } catch (error) {
+        console.error("Error initializing auth:", error)
+        setLoading(false)
+      }
+    }
+
+    checkConfiguration()
+
+    // Listen for storage changes (when Supabase config is updated)
+    const handleStorageChange = () => {
+      checkConfiguration()
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
     }
   }, [])
 
-  // Set up event listeners for online/offline events
-  useEffect(() => {
-    if (!isInitialized) return
-
-    const handleOnline = () => setIsOnline(true)
-    const handleOffline = () => setIsOnline(false)
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("online", handleOnline)
-      window.addEventListener("offline", handleOffline)
+  const fetchUserProfile = async (authUser: User, client = getClient()) => {
+    if (!client) {
+      setUser(authUser as AuthUser)
+      setLoading(false)
+      return
     }
-
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("online", handleOnline)
-        window.removeEventListener("offline", handleOffline)
-      }
-    }
-  }, [isInitialized])
-
-  // Set up interval to check pending changes
-  useEffect(() => {
-    if (!isInitialized) return
-
-    const interval = setInterval(() => {
-      try {
-        // In a real app, this would check the sync queue
-        const pendingItems = SecureStorage.getItem("pendingChanges", [])
-        setPendingChanges(Array.isArray(pendingItems) ? pendingItems.length : 0)
-      } catch (error) {
-        console.error("Error checking pending changes:", error)
-      }
-    }, 5000)
-
-    return () => clearInterval(interval)
-  }, [isInitialized])
-
-  // Function to check if an email is an admin email
-  const isAdminEmail = (email: string): boolean => {
-    // Check if the email is in the admin emails list
-    if (ADMIN_EMAILS.includes(email.toLowerCase())) {
-      return true
-    }
-
-    // Also check if the email contains "admin" for backward compatibility
-    return email.toLowerCase().includes("admin")
-  }
-
-  // Login function with offline support
-  const login = async (email: string, password: string): Promise<boolean> => {
-    console.log("AuthProvider: Login attempt", { email })
 
     try {
-      // Check if we're online
-      if (typeof navigator !== "undefined" && navigator.onLine) {
-        // Online login - would normally call your API
-        // For demo, we'll simulate a successful login
+      const { data: profile, error } = await client.from("users").select("*").eq("id", authUser.id).single()
 
-        // Check if this is an admin email
-        const isAdmin = isAdminEmail(email)
-        console.log("Is admin email:", isAdmin)
+      if (error) {
+        console.error("Error fetching user profile:", error)
+        setUser(authUser as AuthUser)
+      } else {
+        setUser({ ...authUser, ...profile } as AuthUser)
+      }
+    } catch (error) {
+      console.error("Error in fetchUserProfile:", error)
+      setUser(authUser as AuthUser)
+    } finally {
+      setLoading(false)
+    }
+  }
 
-        // Create a user object with explicit isAdmin flag
-        const user: User = {
-          id: "user-" + Date.now(),
-          name: email.split("@")[0],
+  const signIn = async (email: string, password: string) => {
+    const client = getClient()
+    if (!client) {
+      throw new Error("Supabase is not configured. Please configure it in settings first.")
+    }
+
+    try {
+      const { data, error } = await client.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) throw error
+
+      if (data.user) {
+        // Update last login
+        await client.from("users").update({ last_login_at: new Date().toISOString() }).eq("id", data.user.id)
+
+        await fetchUserProfile(data.user, client)
+      }
+    } catch (error: any) {
+      throw new Error(error.message || "Failed to sign in")
+    }
+  }
+
+  const signUp = async (email: string, password: string, userData: any) => {
+    const client = getClient()
+    if (!client) {
+      throw new Error("Supabase is not configured. Please configure it in settings first.")
+    }
+
+    try {
+      // First check if we're hitting rate limits
+      const { data: authData, error: authError } = await client.auth.signUp({
+        email,
+        password,
+      })
+
+      if (authError) {
+        // Check if it's a rate limit error
+        if (authError.message.includes("rate limit") || authError.message.includes("too many")) {
+          // Add to waitlist instead
+          const { error: waitlistError } = await client.from("waitlist").insert([
+            {
+              email,
+              full_name: userData.full_name,
+              phone_number: userData.phone_number,
+              county: userData.county,
+              farm_name: userData.farm_name,
+              status: "pending",
+            },
+          ])
+
+          if (waitlistError) throw waitlistError
+
+          throw new Error(
+            "Due to high demand, you have been added to our waitlist. We will notify you when your account is ready.",
+          )
+        }
+        throw authError
+      }
+
+      if (authData.user) {
+        // Create user profile with adaptive column detection
+        const profileData: any = {
+          id: authData.user.id,
           email,
-          role: isAdmin ? "admin" : "user",
-          lastLoginAt: Date.now(),
-          isAdmin: isAdmin, // Explicitly set isAdmin flag
+          full_name: userData.full_name,
+          county: userData.county,
+          farm_name: userData.farm_name,
+          terms_accepted: true,
+          terms_accepted_at: new Date().toISOString(),
         }
 
-        console.log("User created with isAdmin:", isAdmin)
+        // Add phone_number if provided
+        if (userData.phone_number) {
+          profileData.phone_number = userData.phone_number
+        }
 
-        // Store user securely
-        setUser(user)
-        SecureStorage.setItem("user", user)
+        const { error: profileError } = await client.from("users").insert([profileData])
 
-        // Also store credentials securely for offline login
-        SecureStorage.setItem("credentials", { email, passwordHash: hashPassword(password) })
+        if (profileError) {
+          // If phone_number column doesn't exist, try without it
+          if (profileError.message.includes("phone_number")) {
+            const { phone_number, ...profileWithoutPhone } = profileData
+            const { error: retryError } = await client.from("users").insert([profileWithoutPhone])
 
-        console.log("AuthProvider: Online login successful")
-        return true
-      } else {
-        // Offline login - check stored credentials
-        const storedCreds = SecureStorage.getItem("credentials", null)
-
-        if (storedCreds && storedCreds.email === email && storedCreds.passwordHash === hashPassword(password)) {
-          // Get stored user
-          const storedUser = SecureStorage.getItem("user", null)
-          if (storedUser) {
-            setUser(storedUser)
-            console.log("AuthProvider: Offline login successful")
-            return true
+            if (retryError) throw retryError
+          } else {
+            throw profileError
           }
         }
-
-        console.log("AuthProvider: Offline login failed - invalid credentials")
-        return false
       }
-    } catch (error) {
-      console.error("AuthProvider: Login error", error)
-      return false
+    } catch (error: any) {
+      throw new Error(error.message || "Failed to sign up")
     }
   }
 
-  // Simple signup function
-  const signup = async (name: string, email: string, password: string, phone?: string): Promise<boolean> => {
-    console.log("AuthProvider: Signup attempt", { name, email })
-
-    // Check if we're online - signup requires internet
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      console.log("AuthProvider: Signup failed - offline")
-      return false
+  const signOut = async () => {
+    const client = getClient()
+    if (!client) {
+      throw new Error("Supabase is not configured")
     }
 
-    try {
-      // Check if this is an admin email
-      const isAdmin = isAdminEmail(email)
-
-      // Create a user object
-      const user: User = {
-        id: "user-" + Date.now(),
-        name,
-        email,
-        role: isAdmin ? "admin" : "user",
-        lastLoginAt: Date.now(),
-        isAdmin: isAdmin,
-      }
-
-      // Store user securely
-      setUser(user)
-      SecureStorage.setItem("user", user)
-
-      // Store credentials for offline login
-      SecureStorage.setItem("credentials", { email, passwordHash: hashPassword(password) })
-
-      console.log("AuthProvider: Signup successful")
-      return true
-    } catch (error) {
-      console.error("AuthProvider: Signup error", error)
-      return false
-    }
+    const { error } = await client.auth.signOut()
+    if (error) throw error
   }
 
-  // Logout function
-  const logout = () => {
-    console.log("AuthProvider: Logout")
-    setUser(null)
-    // Note: We don't remove credentials to allow future offline login
-    SecureStorage.removeItem("user")
+  const isAdmin = user?.is_admin || false
+
+  const value = {
+    user,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    isAdmin,
+    supabaseConfigured,
   }
 
-  // Emergency access function
-  const emergencyAccess = () => {
-    console.log("AuthProvider: Emergency access")
-    setUser(defaultUser)
-    SecureStorage.setItem("user", defaultUser)
-  }
-
-  // If not initialized yet, show a simple loading state
-  if (!isInitialized) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Initializing Maziwa Smart...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner />
       </div>
     )
   }
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        login,
-        signup,
-        logout,
-        emergencyAccess,
-        isOnline,
-        pendingChanges,
-        isInitialized,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  )
-}
-
-// Simple password hashing function - in production use a proper hashing library
-function hashPassword(password: string): string {
-  // This is NOT secure - just for demo purposes
-  // In production, use bcrypt or similar
-  let hash = 0
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i)
-    hash = (hash << 5) - hash + char
-    hash = hash & hash // Convert to 32bit integer
-  }
-  return hash.toString(16)
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
-  return useContext(AuthContext)
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider")
+  }
+  return context
 }

@@ -1,370 +1,569 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { DataTable } from "@/components/data-table"
-import { Plus, Milk, Clock, Calendar } from "lucide-react"
+import { ArrowLeft, Save, Edit, Trash2, Plus, Search, Calendar, Clock, Milk } from "lucide-react"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { useSubscriptionGuard } from "@/lib/subscription"
+import { SubscriptionNotice } from "@/components/subscription-notice"
+import { format } from "date-fns"
+import { useToast } from "@/hooks/use-toast"
+import { cowOperations, milkProductionOperations } from "@/lib/supabase-operations"
+import { isSupabaseConfigured } from "@/lib/supabase"
 
 interface MilkRecord {
   id: string
-  cowId: string
-  cowName: string
+  cow_id: string
   date: string
-  timeOfDay: "morning" | "afternoon" | "evening"
+  time_of_day: "morning" | "afternoon" | "evening"
   amount: number
-  quality: "excellent" | "good" | "fair" | "poor"
   notes?: string
+  cows?: {
+    id: string
+    tag_number: string
+    name: string
+  }
 }
 
-interface Cow {
+interface CowData {
   id: string
+  tag_number: string
   name: string
-  tagNumber: string
+  breed: string
+  date_of_birth: string
+  lactation_status:
+    | {
+        lactating: boolean
+        dry: boolean
+        inCalf: boolean
+      }
+    | string
 }
 
 export default function ProductionPage() {
-  const [records, setRecords] = useState<MilkRecord[]>([])
-  const [cows, setCows] = useState<Cow[]>([])
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
-  const [selectedTimeFilter, setSelectedTimeFilter] = useState<string>("all")
+  const { toast } = useToast()
+  const [milkRecords, setMilkRecords] = useState<MilkRecord[]>([])
+  const [cows, setCows] = useState<CowData[]>([])
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<MilkRecord | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [recordToDelete, setRecordToDelete] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"))
+  const [selectedTimeOfDay, setSelectedTimeOfDay] = useState<"all" | "morning" | "afternoon" | "evening">("all")
+  const [blockedDialogOpen, setBlockedDialogOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  // Sample data
+  // Form states
+  const [cowId, setCowId] = useState("")
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"))
+  const [timeOfDay, setTimeOfDay] = useState<"morning" | "afternoon" | "evening">("morning")
+  const [amount, setAmount] = useState("")
+  const [notes, setNotes] = useState("")
+
+  const { blocked, amountDue, cowCount } = useSubscriptionGuard()
+
+  const isCowLactating = (cow: CowData): boolean => {
+    if (typeof cow.lactation_status === "object" && cow.lactation_status !== null) {
+      return (cow.lactation_status as any).lactating === true
+    }
+    return cow.lactation_status === "lactating"
+  }
+
+  // Load data on component mount
   useEffect(() => {
-    const sampleCows: Cow[] = [
-      { id: "1", name: "Bessie", tagNumber: "COW001" },
-      { id: "2", name: "Daisy", tagNumber: "COW002" },
-      { id: "3", name: "Molly", tagNumber: "COW003" },
-    ]
+    loadData()
 
-    const sampleRecords: MilkRecord[] = [
-      {
-        id: "1",
-        cowId: "1",
-        cowName: "Bessie (COW001)",
-        date: "2024-01-08",
-        timeOfDay: "morning",
-        amount: 15.5,
-        quality: "excellent",
-        notes: "Good quality milk",
-      },
-      {
-        id: "2",
-        cowId: "2",
-        cowName: "Daisy (COW002)",
-        date: "2024-01-08",
-        timeOfDay: "morning",
-        amount: 12.3,
-        quality: "good",
-      },
-      {
-        id: "3",
-        cowId: "1",
-        cowName: "Bessie (COW001)",
-        date: "2024-01-08",
-        timeOfDay: "evening",
-        amount: 14.2,
-        quality: "excellent",
-      },
-    ]
+    // Set up real-time subscriptions if Supabase is configured
+    if (isSupabaseConfigured()) {
+      const unsubscribeCows = cowOperations.subscribe((payload) => {
+        console.log("Cows changed:", payload)
+        loadCows()
+      })
 
-    setCows(sampleCows)
-    setRecords(sampleRecords)
+      const unsubscribeMilk = milkProductionOperations.subscribe((payload) => {
+        console.log("Milk production changed:", payload)
+        loadMilkRecords()
+      })
+
+      return () => {
+        unsubscribeCows()
+        unsubscribeMilk()
+      }
+    }
   }, [])
 
-  const [newRecord, setNewRecord] = useState<Partial<MilkRecord>>({
-    date: selectedDate,
-    timeOfDay: "morning",
-    amount: 0,
-    quality: "good",
-  })
-
-  const filteredRecords = records.filter((record) => {
-    const dateMatch = record.date === selectedDate
-    const timeMatch = selectedTimeFilter === "all" || record.timeOfDay === selectedTimeFilter
-    return dateMatch && timeMatch
-  })
-
-  const handleAddRecord = () => {
-    if (newRecord.cowId && newRecord.amount && newRecord.timeOfDay) {
-      const selectedCow = cows.find((cow) => cow.id === newRecord.cowId)
-      const record: MilkRecord = {
-        id: Date.now().toString(),
-        cowId: newRecord.cowId,
-        cowName: `${selectedCow?.name} (${selectedCow?.tagNumber})`,
-        date: newRecord.date || selectedDate,
-        timeOfDay: newRecord.timeOfDay,
-        amount: newRecord.amount,
-        quality: newRecord.quality || "good",
-        notes: newRecord.notes,
-      }
-
-      setRecords([...records, record])
-      setNewRecord({
-        date: selectedDate,
-        timeOfDay: "morning",
-        amount: 0,
-        quality: "good",
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      await Promise.all([loadCows(), loadMilkRecords()])
+    } catch (error) {
+      console.error("Error loading data:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load data. Please try again.",
+        variant: "destructive",
       })
-      setIsAddDialogOpen(false)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const getTotalMilk = () => {
-    return filteredRecords.reduce((total, record) => total + record.amount, 0)
+  const loadCows = async () => {
+    try {
+      const cowsData = await cowOperations.getAll()
+      setCows(cowsData)
+    } catch (error) {
+      console.error("Error loading cows:", error)
+    }
   }
 
-  const getAverageMilk = () => {
-    const total = getTotalMilk()
-    return filteredRecords.length > 0 ? total / filteredRecords.length : 0
+  const loadMilkRecords = async () => {
+    try {
+      const recordsData = await milkProductionOperations.getAll()
+      setMilkRecords(recordsData)
+    } catch (error) {
+      console.error("Error loading milk records:", error)
+    }
   }
 
-  const columns = [
-    {
-      key: "cowName",
-      title: "Cow",
-      render: (record: MilkRecord) => <div className="font-medium">{record.cowName}</div>,
-    },
-    {
-      key: "timeOfDay",
-      title: "Time",
-      render: (record: MilkRecord) => (
-        <Badge
-          variant={
-            record.timeOfDay === "morning" ? "default" : record.timeOfDay === "afternoon" ? "secondary" : "outline"
-          }
-        >
-          <Clock className="w-3 h-3 mr-1" />
-          {record.timeOfDay}
-        </Badge>
-      ),
-    },
-    {
-      key: "amount",
-      title: "Amount (L)",
-      render: (record: MilkRecord) => <div className="font-mono">{record.amount.toFixed(1)}L</div>,
-    },
-    {
-      key: "quality",
-      title: "Quality",
-      render: (record: MilkRecord) => (
-        <Badge
-          variant={record.quality === "excellent" ? "default" : record.quality === "good" ? "secondary" : "outline"}
-        >
-          {record.quality}
-        </Badge>
-      ),
-    },
-    {
-      key: "notes",
-      title: "Notes",
-      render: (record: MilkRecord) => <div className="text-sm text-gray-600">{record.notes || "-"}</div>,
-    },
-  ]
+  const guardBlocked = (): boolean => {
+    if (blocked) {
+      setBlockedDialogOpen(true)
+      return true
+    }
+    return false
+  }
+
+  const handleSaveRecord = async () => {
+    if (guardBlocked()) return
+    if (!cowId || !date || !timeOfDay || !amount) return
+
+    setSaving(true)
+    try {
+      const recordData = {
+        cow_id: cowId,
+        date,
+        time_of_day: timeOfDay,
+        amount: Number.parseFloat(amount),
+        notes: notes || undefined,
+      }
+
+      if (editingRecord) {
+        await milkProductionOperations.update(editingRecord.id, recordData)
+        toast({
+          title: "Success",
+          description: "Milk record updated successfully.",
+        })
+      } else {
+        await milkProductionOperations.create(recordData)
+        toast({
+          title: "Success",
+          description: "Milk record added successfully.",
+        })
+      }
+
+      await loadMilkRecords()
+      resetForm()
+      setDialogOpen(false)
+    } catch (error) {
+      console.error("Error saving record:", error)
+      toast({
+        title: "Error",
+        description: "Failed to save milk record. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const resetForm = () => {
+    setCowId("")
+    setDate(format(new Date(), "yyyy-MM-dd"))
+    setTimeOfDay("morning")
+    setAmount("")
+    setNotes("")
+    setEditingRecord(null)
+  }
+
+  const handleEditRecord = (record: MilkRecord) => {
+    setEditingRecord(record)
+    setCowId(record.cow_id)
+    setDate(record.date)
+    setTimeOfDay(record.time_of_day)
+    setAmount(record.amount.toString())
+    setNotes(record.notes || "")
+    setDialogOpen(true)
+  }
+
+  const handleDeleteRecord = async () => {
+    if (!recordToDelete) return
+
+    try {
+      await milkProductionOperations.delete(recordToDelete)
+      await loadMilkRecords()
+      toast({
+        title: "Success",
+        description: "Milk record deleted successfully.",
+      })
+    } catch (error) {
+      console.error("Error deleting record:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete milk record. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setRecordToDelete(null)
+      setDeleteDialogOpen(false)
+    }
+  }
+
+  // Filters
+  const filteredRecords = milkRecords.filter((record) => {
+    const cowName = record.cows ? `${record.cows.name} (${record.cows.tag_number})` : "Unknown Cow"
+    const matchesSearch = cowName.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesDate = selectedDate ? record.date === selectedDate : true
+    const matchesTimeOfDay = selectedTimeOfDay === "all" || record.time_of_day === selectedTimeOfDay
+    return matchesSearch && matchesDate && matchesTimeOfDay
+  })
+
+  const totalMilk = filteredRecords.reduce((sum, record) => sum + record.amount, 0)
+  const averagePerRecord = filteredRecords.length > 0 ? totalMilk / filteredRecords.length : 0
+  const activeCows = new Set(filteredRecords.map((record) => record.cow_id)).size
+
+  const lactatingCows = cows.filter((cow) => isCowLactating(cow))
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center mb-6">
+          <Button variant="ghost" size="icon" asChild className="mr-2">
+            <Link href="/dashboard">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <h1 className="text-2xl font-bold text-emerald-800 dark:text-emerald-400">Milk Production</h1>
+        </div>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Milk Production</h1>
-          <p className="text-muted-foreground">Track daily milk production by cow and time</p>
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex items-center mb-6">
+        <Button variant="ghost" size="icon" asChild className="mr-2">
+          <Link href="/dashboard">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+        </Button>
+        <h1 className="text-2xl font-bold text-emerald-800 dark:text-emerald-400">Milk Production</h1>
+      </div>
+
+      <div className="flex justify-between items-center mb-6">
+        <p className="text-gray-600 dark:text-gray-400">Track daily milk production by cow and time</p>
+        <Button
+          onClick={() => {
+            if (guardBlocked()) return
+            resetForm()
+            setDialogOpen(true)
+          }}
+          className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
+        >
+          <Plus className="mr-2 h-4 w-4" /> Add Milk Record
+        </Button>
+      </div>
+
+      {blocked && <SubscriptionNotice amountDue={amountDue} cowCount={cowCount} />}
+
+      {/* Connection Status */}
+      {!isSupabaseConfigured() && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-md dark:bg-amber-900/20 dark:border-amber-800">
+          <p className="text-amber-800 dark:text-amber-400">
+            <strong>Offline Mode:</strong> Using local storage. Connect to Supabase in Settings for real-time sync.
+          </p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Record
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Milk Production Record</DialogTitle>
-              <DialogDescription>Record milk production for a specific cow and time</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="cow">Cow</Label>
-                <Select value={newRecord.cowId} onValueChange={(value) => setNewRecord({ ...newRecord, cowId: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a cow" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cows.map((cow) => (
-                      <SelectItem key={cow.id} value={cow.id}>
-                        {cow.name} ({cow.tagNumber})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+      )}
 
-              <div>
-                <Label htmlFor="date">Date</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={newRecord.date}
-                  onChange={(e) => setNewRecord({ ...newRecord, date: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="timeOfDay">Time of Day</Label>
-                <Select
-                  value={newRecord.timeOfDay}
-                  onValueChange={(value: "morning" | "afternoon" | "evening") =>
-                    setNewRecord({ ...newRecord, timeOfDay: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="morning">Morning</SelectItem>
-                    <SelectItem value="afternoon">Afternoon</SelectItem>
-                    <SelectItem value="evening">Evening</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="amount">Amount (Liters)</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.1"
-                  value={newRecord.amount}
-                  onChange={(e) => setNewRecord({ ...newRecord, amount: Number.parseFloat(e.target.value) })}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="quality">Quality</Label>
-                <Select
-                  value={newRecord.quality}
-                  onValueChange={(value: "excellent" | "good" | "fair" | "poor") =>
-                    setNewRecord({ ...newRecord, quality: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="excellent">Excellent</SelectItem>
-                    <SelectItem value="good">Good</SelectItem>
-                    <SelectItem value="fair">Fair</SelectItem>
-                    <SelectItem value="poor">Poor</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="notes">Notes (Optional)</Label>
-                <Input
-                  id="notes"
-                  value={newRecord.notes || ""}
-                  onChange={(e) => setNewRecord({ ...newRecord, notes: e.target.value })}
-                  placeholder="Any additional notes..."
-                />
-              </div>
-
-              <Button onClick={handleAddRecord} className="w-full">
-                Add Record
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Milk Today</CardTitle>
-            <Milk className="h-4 w-4 text-muted-foreground" />
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <Card className="bg-white dark:bg-gray-800 shadow-md hover:shadow-lg transition-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-medium flex items-center">
+              <Milk className="mr-2 h-5 w-5 text-emerald-600" />
+              Total Milk
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{getTotalMilk().toFixed(1)}L</div>
-            <p className="text-xs text-muted-foreground">From {filteredRecords.length} records</p>
+            <div className="text-3xl font-bold">{totalMilk.toFixed(1)} L</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">{filteredRecords.length} records</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Average per Record</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+        <Card className="bg-white dark:bg-gray-800 shadow-md hover:shadow-lg transition-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-medium flex items-center">
+              <Calendar className="mr-2 h-5 w-5 text-blue-600" />
+              Average per Record
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{getAverageMilk().toFixed(1)}L</div>
-            <p className="text-xs text-muted-foreground">Per milking session</p>
+            <div className="text-3xl font-bold">{averagePerRecord.toFixed(1)} L</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">Per milking session</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Cows</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+        <Card className="bg-white dark:bg-gray-800 shadow-md hover:shadow-lg transition-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-medium flex items-center">
+              <Clock className="mr-2 h-5 w-5 text-purple-600" />
+              Active Cows
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{cows.length}</div>
-            <p className="text-xs text-muted-foreground">Total registered cows</p>
+            <div className="text-3xl font-bold">{activeCows}</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">Producing milk</div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Filters */}
+      <div className="mb-6 flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
+          <Input
+            placeholder="Search by cow name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+        <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-auto" />
+        <Select
+          value={selectedTimeOfDay}
+          onValueChange={(value: "all" | "morning" | "afternoon" | "evening") => setSelectedTimeOfDay(value)}
+        >
+          <SelectTrigger className="w-auto">
+            <SelectValue placeholder="Time of day" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Times</SelectItem>
+            <SelectItem value="morning">Morning</SelectItem>
+            <SelectItem value="afternoon">Afternoon</SelectItem>
+            <SelectItem value="evening">Evening</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Records Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Production Records</CardTitle>
-          <CardDescription>View and manage milk production records</CardDescription>
-          <div className="flex gap-4">
-            <div>
-              <Label htmlFor="date-filter">Date</Label>
-              <Input
-                id="date-filter"
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-              />
+          <CardTitle>Milk Production Records</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {filteredRecords.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Milk className="mx-auto h-12 w-12 opacity-30 mb-2" />
+              <p>No milk production records found</p>
             </div>
-            <div>
-              <Label htmlFor="time-filter">Time Filter</Label>
-              <Select value={selectedTimeFilter} onValueChange={setSelectedTimeFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2">Date</th>
+                    <th className="text-left py-2">Cow</th>
+                    <th className="text-left py-2">Time of Day</th>
+                    <th className="text-left py-2">Amount (L)</th>
+                    <th className="text-left py-2">Notes</th>
+                    <th className="text-right py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRecords.map((record) => (
+                    <tr key={record.id} className="border-b">
+                      <td className="py-2">{format(new Date(record.date), "MMM dd, yyyy")}</td>
+                      <td className="py-2 font-medium">
+                        {record.cows ? `${record.cows.name} (${record.cows.tag_number})` : "Unknown Cow"}
+                      </td>
+                      <td className="py-2">
+                        <Badge
+                          className={`${
+                            record.time_of_day === "morning"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              : record.time_of_day === "afternoon"
+                                ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
+                                : "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+                          }`}
+                        >
+                          {record.time_of_day}
+                        </Badge>
+                      </td>
+                      <td className="py-2 font-mono">{record.amount.toFixed(1)}</td>
+                      <td className="py-2 text-sm text-gray-600 dark:text-gray-400">{record.notes || "-"}</td>
+                      <td className="py-2 text-right">
+                        <div className="flex justify-end space-x-2">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditRecord(record)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setRecordToDelete(record.id)
+                              setDeleteDialogOpen(true)
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingRecord ? "Edit Milk Record" : "Add Milk Record"}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="cow">Cow*</Label>
+              <Select value={cowId} onValueChange={setCowId}>
+                <SelectTrigger id="cow">
+                  <SelectValue placeholder="Select cow" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Times</SelectItem>
+                  {lactatingCows.length === 0 ? (
+                    <div className="p-2 text-sm text-gray-500">No lactating cows available.</div>
+                  ) : (
+                    lactatingCows.map((cow) => (
+                      <SelectItem key={cow.id} value={cow.id}>
+                        {cow.name} ({cow.tag_number})
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="date">Date*</Label>
+              <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="timeOfDay">Time of Day*</Label>
+              <Select value={timeOfDay} onValueChange={(v: "morning" | "afternoon" | "evening") => setTimeOfDay(v)}>
+                <SelectTrigger id="timeOfDay">
+                  <SelectValue placeholder="Select time" />
+                </SelectTrigger>
+                <SelectContent>
                   <SelectItem value="morning">Morning</SelectItem>
                   <SelectItem value="afternoon">Afternoon</SelectItem>
                   <SelectItem value="evening">Evening</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="amount">Amount (Liters)*</Label>
+              <Input
+                id="amount"
+                type="number"
+                step="0.1"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="Enter amount in liters"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Input id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+            </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            data={filteredRecords}
-            columns={columns}
-            searchable={true}
-            searchKeys={["cowName", "notes"]}
-            pagination={true}
-            pageSize={10}
-          />
-        </CardContent>
-      </Card>
+          <DialogFooter>
+            <Button
+              onClick={handleSaveRecord}
+              className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
+              disabled={!cowId || !date || !timeOfDay || !amount || saving}
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {saving ? "Saving..." : editingRecord ? "Update" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Deletion</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this milk production record? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteRecord}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Blocked modal */}
+      <Dialog open={blockedDialogOpen} onOpenChange={setBlockedDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Subscription Needed</DialogTitle>
+            <DialogDescription>
+              You cannot add new milk records because your subscription is inactive.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm">
+            Amount due: <strong>KSH {amountDue.toLocaleString()}</strong> for {cowCount} cow{cowCount === 1 ? "" : "s"}{" "}
+            (KSH 300 per cow/month).
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBlockedDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button asChild className="bg-emerald-600 hover:bg-emerald-700">
+              <Link href="/subscription">Continue to Pay</Link>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

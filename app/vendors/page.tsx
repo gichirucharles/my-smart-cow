@@ -21,6 +21,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { vendorOperations, milkCollectionOperations } from "@/lib/supabase-operations"
+import { isSupabaseConfigured } from "@/lib/supabase"
 
 // Types
 interface Vendor {
@@ -30,17 +32,24 @@ interface Vendor {
   email?: string
   address?: string
   notes?: string
-  defaultMilkPrice?: number // Add default milk price for vendor
+  milk_price_per_liter?: number
+  vendor_type: string
 }
 
 interface MilkCollection {
   id: string
-  vendorId: string
-  date: string
-  timeOfDay: "morning" | "day" | "evening"
-  quantity: number
-  price: number
+  vendor_id: string
+  collection_date: string
+  time_of_day: "morning" | "day" | "evening"
+  quantity_liters: number
+  price_per_liter: number
+  total_amount: number
   notes?: string
+  vendors?: {
+    id: string
+    name: string
+    phone: string
+  }
 }
 
 export default function VendorsPage() {
@@ -55,67 +64,96 @@ export default function VendorsPage() {
   const [isDeleteCollectionOpen, setIsDeleteCollectionOpen] = useState(false)
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null)
   const [selectedCollection, setSelectedCollection] = useState<MilkCollection | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [newVendor, setNewVendor] = useState<Partial<Vendor>>({
     name: "",
     phone: "",
     email: "",
     address: "",
     notes: "",
-    defaultMilkPrice: 0, // Initialize default milk price
+    milk_price_per_liter: 0,
+    vendor_type: "buyer",
   })
   const [newCollection, setNewCollection] = useState<Partial<MilkCollection>>({
-    vendorId: "",
-    date: format(new Date(), "yyyy-MM-dd"),
-    timeOfDay: "morning",
-    quantity: 0,
-    price: 0,
+    vendor_id: "",
+    collection_date: format(new Date(), "yyyy-MM-dd"),
+    time_of_day: "morning",
+    quantity_liters: 0,
+    price_per_liter: 0,
     notes: "",
   })
   const [defaultMilkPrice, setDefaultMilkPrice] = useState<number>(0)
   const [dateError, setDateError] = useState<string | null>(null)
 
+  // Load data on component mount
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedVendors = localStorage.getItem("vendors")
-      if (savedVendors) setVendors(JSON.parse(savedVendors))
+    loadData()
 
-      const savedCollections = localStorage.getItem("milkCollections")
-      if (savedCollections) setCollections(JSON.parse(savedCollections))
+    // Set up real-time subscriptions if Supabase is configured
+    if (isSupabaseConfigured()) {
+      const unsubscribeVendors = vendorOperations.subscribe((payload) => {
+        console.log("Vendors changed:", payload)
+        loadVendors()
+      })
 
-      // Get the default milk price from app settings
-      const settings = JSON.parse(localStorage.getItem("appSettings") || "{}")
-      if (settings.milkPrice) {
-        setDefaultMilkPrice(settings.milkPrice)
+      const unsubscribeCollections = milkCollectionOperations.subscribe((payload) => {
+        console.log("Milk collections changed:", payload)
+        loadCollections()
+      })
 
-        // Set the default price for new collections
-        setNewCollection((prev) => ({
-          ...prev,
-          price: settings.milkPrice,
-        }))
-      } else {
-        // If no price is set in settings, check if there's an active price in milk prices
-        const milkPrices = JSON.parse(localStorage.getItem("milkPrices") || "[]")
-        const today = new Date().toISOString().split("T")[0]
-        const activePrice = milkPrices.find(
-          (p: any) => p.effectiveFrom <= today && (!p.effectiveTo || p.effectiveTo >= today),
-        )
-
-        if (activePrice) {
-          setDefaultMilkPrice(activePrice.price)
-
-          // Set the default price for new collections
-          setNewCollection((prev) => ({
-            ...prev,
-            price: activePrice.price,
-          }))
-
-          // Update app settings
-          settings.milkPrice = activePrice.price
-          localStorage.setItem("appSettings", JSON.stringify(settings))
-        }
+      return () => {
+        unsubscribeVendors()
+        unsubscribeCollections()
       }
     }
   }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      await Promise.all([loadVendors(), loadCollections()])
+
+      // Get the default milk price from app settings
+      if (typeof window !== "undefined") {
+        const settings = JSON.parse(localStorage.getItem("appSettings") || "{}")
+        if (settings.milkPrice) {
+          setDefaultMilkPrice(settings.milkPrice)
+          setNewCollection((prev) => ({
+            ...prev,
+            price_per_liter: settings.milkPrice,
+          }))
+        }
+      }
+    } catch (error) {
+      console.error("Error loading data:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load data. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadVendors = async () => {
+    try {
+      const vendorsData = await vendorOperations.getAll()
+      setVendors(vendorsData)
+    } catch (error) {
+      console.error("Error loading vendors:", error)
+    }
+  }
+
+  const loadCollections = async () => {
+    try {
+      const collectionsData = await milkCollectionOperations.getAll()
+      setCollections(collectionsData)
+    } catch (error) {
+      console.error("Error loading collections:", error)
+    }
+  }
 
   // Validate date to ensure it's not in the future
   const validateDate = (selectedDate: string): boolean => {
@@ -133,259 +171,261 @@ export default function VendorsPage() {
     return true
   }
 
-  const handleAddVendor = () => {
+  const handleAddVendor = async () => {
     if (!newVendor.name || !newVendor.phone) return
 
-    const vendor: Vendor = {
-      id: Date.now().toString(),
-      name: newVendor.name,
-      phone: newVendor.phone,
-      email: newVendor.email || "",
-      address: newVendor.address || "",
-      notes: newVendor.notes || "",
-      defaultMilkPrice: newVendor.defaultMilkPrice || defaultMilkPrice, // Use vendor-specific price or global default
+    setSaving(true)
+    try {
+      const vendorData = {
+        name: newVendor.name,
+        phone: newVendor.phone,
+        email: newVendor.email || "",
+        address: newVendor.address || "",
+        notes: newVendor.notes || "",
+        milk_price_per_liter: newVendor.milk_price_per_liter || defaultMilkPrice,
+        vendor_type: newVendor.vendor_type || "buyer",
+      }
+
+      await vendorOperations.create(vendorData)
+      await loadVendors()
+
+      setNewVendor({
+        name: "",
+        phone: "",
+        email: "",
+        address: "",
+        notes: "",
+        milk_price_per_liter: defaultMilkPrice,
+        vendor_type: "buyer",
+      })
+      setIsAddVendorOpen(false)
+
+      toast({
+        title: "Vendor Added",
+        description: `${vendorData.name} has been added successfully.`,
+      })
+    } catch (error) {
+      console.error("Error adding vendor:", error)
+      toast({
+        title: "Error",
+        description: "Failed to add vendor. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
     }
-
-    const updatedVendors = [...vendors, vendor]
-    setVendors(updatedVendors)
-    localStorage.setItem("vendors", JSON.stringify(updatedVendors))
-
-    setNewVendor({
-      name: "",
-      phone: "",
-      email: "",
-      address: "",
-      notes: "",
-      defaultMilkPrice: defaultMilkPrice,
-    })
-    setIsAddVendorOpen(false)
-
-    toast({
-      title: "Vendor Added",
-      description: `${vendor.name} has been added successfully.`,
-    })
-
-    // Log activity
-    const activityLogs = JSON.parse(localStorage.getItem("activityLogs") || "[]")
-    activityLogs.unshift({
-      id: Date.now().toString(),
-      action: "Vendor Added",
-      details: `Added vendor: ${vendor.name}`,
-      timestamp: new Date().toISOString(),
-    })
-    localStorage.setItem("activityLogs", JSON.stringify(activityLogs))
   }
 
-  const handleEditVendor = () => {
+  const handleEditVendor = async () => {
     if (!selectedVendor || !newVendor.name || !newVendor.phone) return
 
-    const updatedVendor: Vendor = {
-      ...selectedVendor,
-      name: newVendor.name,
-      phone: newVendor.phone,
-      email: newVendor.email || "",
-      address: newVendor.address || "",
-      notes: newVendor.notes || "",
-      defaultMilkPrice: newVendor.defaultMilkPrice || selectedVendor.defaultMilkPrice || defaultMilkPrice,
+    setSaving(true)
+    try {
+      const updates = {
+        name: newVendor.name,
+        phone: newVendor.phone,
+        email: newVendor.email || "",
+        address: newVendor.address || "",
+        notes: newVendor.notes || "",
+        milk_price_per_liter: newVendor.milk_price_per_liter || selectedVendor.milk_price_per_liter || defaultMilkPrice,
+        vendor_type: newVendor.vendor_type || selectedVendor.vendor_type,
+      }
+
+      await vendorOperations.update(selectedVendor.id, updates)
+      await loadVendors()
+
+      setNewVendor({
+        name: "",
+        phone: "",
+        email: "",
+        address: "",
+        notes: "",
+        milk_price_per_liter: defaultMilkPrice,
+        vendor_type: "buyer",
+      })
+      setSelectedVendor(null)
+      setIsEditVendorOpen(false)
+
+      toast({
+        title: "Vendor Updated",
+        description: `${updates.name} has been updated successfully.`,
+      })
+    } catch (error) {
+      console.error("Error updating vendor:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update vendor. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
     }
-
-    const updatedVendors = vendors.map((v) => (v.id === selectedVendor.id ? updatedVendor : v))
-    setVendors(updatedVendors)
-    localStorage.setItem("vendors", JSON.stringify(updatedVendors))
-
-    setNewVendor({
-      name: "",
-      phone: "",
-      email: "",
-      address: "",
-      notes: "",
-      defaultMilkPrice: defaultMilkPrice,
-    })
-    setSelectedVendor(null)
-    setIsEditVendorOpen(false)
-
-    toast({
-      title: "Vendor Updated",
-      description: `${updatedVendor.name} has been updated successfully.`,
-    })
-
-    // Log activity
-    const activityLogs = JSON.parse(localStorage.getItem("activityLogs") || "[]")
-    activityLogs.unshift({
-      id: Date.now().toString(),
-      action: "Vendor Updated",
-      details: `Updated vendor: ${updatedVendor.name}`,
-      timestamp: new Date().toISOString(),
-    })
-    localStorage.setItem("activityLogs", JSON.stringify(activityLogs))
   }
 
-  const handleDeleteVendor = () => {
+  const handleDeleteVendor = async () => {
     if (!selectedVendor) return
 
-    const updatedVendors = vendors.filter((v) => v.id !== selectedVendor.id)
-    setVendors(updatedVendors)
-    localStorage.setItem("vendors", JSON.stringify(updatedVendors))
+    try {
+      await vendorOperations.delete(selectedVendor.id)
+      await Promise.all([loadVendors(), loadCollections()])
 
-    // Also delete all collections for this vendor
-    const updatedCollections = collections.filter((c) => c.vendorId !== selectedVendor.id)
-    setCollections(updatedCollections)
-    localStorage.setItem("milkCollections", JSON.stringify(updatedCollections))
+      setSelectedVendor(null)
+      setIsDeleteVendorOpen(false)
 
-    setSelectedVendor(null)
-    setIsDeleteVendorOpen(false)
-
-    toast({
-      title: "Vendor Deleted",
-      description: `${selectedVendor.name} has been deleted successfully.`,
-    })
-
-    // Log activity
-    const activityLogs = JSON.parse(localStorage.getItem("activityLogs") || "[]")
-    activityLogs.unshift({
-      id: Date.now().toString(),
-      action: "Vendor Deleted",
-      details: `Deleted vendor: ${selectedVendor.name}`,
-      timestamp: new Date().toISOString(),
-    })
-    localStorage.setItem("activityLogs", JSON.stringify(activityLogs))
-  }
-
-  const handleAddCollection = () => {
-    if (!newCollection.vendorId || !newCollection.date || !newCollection.quantity || !newCollection.price) return
-
-    // Validate date
-    if (!validateDate(newCollection.date as string)) return
-
-    const collection: MilkCollection = {
-      id: Date.now().toString(),
-      vendorId: newCollection.vendorId,
-      date: newCollection.date,
-      timeOfDay: newCollection.timeOfDay as "morning" | "day" | "evening",
-      quantity: Number(newCollection.quantity),
-      price: Number(newCollection.price),
-      notes: newCollection.notes || "",
+      toast({
+        title: "Vendor Deleted",
+        description: `${selectedVendor.name} has been deleted successfully.`,
+      })
+    } catch (error) {
+      console.error("Error deleting vendor:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete vendor. Please try again.",
+        variant: "destructive",
+      })
     }
-
-    const updatedCollections = [...collections, collection]
-    setCollections(updatedCollections)
-    localStorage.setItem("milkCollections", JSON.stringify(updatedCollections))
-
-    // Reset form but keep the vendor ID selected
-    const selectedVendorId = newCollection.vendorId
-    setNewCollection({
-      vendorId: selectedVendorId,
-      date: format(new Date(), "yyyy-MM-dd"),
-      timeOfDay: "morning",
-      quantity: 0,
-      price: getVendorMilkPrice(selectedVendorId), // Use vendor-specific price
-      notes: "",
-    })
-    setIsAddCollectionOpen(false)
-
-    const vendor = vendors.find((v) => v.id === collection.vendorId)
-    toast({
-      title: "Collection Added",
-      description: `Collection for ${vendor?.name} has been added successfully.`,
-    })
-
-    // Log activity
-    const activityLogs = JSON.parse(localStorage.getItem("activityLogs") || "[]")
-    activityLogs.unshift({
-      id: Date.now().toString(),
-      action: "Milk Collection Added",
-      details: `Added milk collection: ${collection.quantity}L from ${vendor?.name} (${collection.timeOfDay})`,
-      timestamp: new Date().toISOString(),
-    })
-    localStorage.setItem("activityLogs", JSON.stringify(activityLogs))
   }
 
-  const handleEditCollection = () => {
+  const handleAddCollection = async () => {
     if (
-      !selectedCollection ||
-      !newCollection.vendorId ||
-      !newCollection.date ||
-      !newCollection.quantity ||
-      !newCollection.price
+      !newCollection.vendor_id ||
+      !newCollection.collection_date ||
+      !newCollection.quantity_liters ||
+      !newCollection.price_per_liter
     )
       return
 
     // Validate date
-    if (!validateDate(newCollection.date as string)) return
+    if (!validateDate(newCollection.collection_date as string)) return
 
-    const updatedCollection: MilkCollection = {
-      ...selectedCollection,
-      vendorId: newCollection.vendorId,
-      date: newCollection.date,
-      timeOfDay: newCollection.timeOfDay as "morning" | "day" | "evening",
-      quantity: Number(newCollection.quantity),
-      price: Number(newCollection.price),
-      notes: newCollection.notes || "",
+    setSaving(true)
+    try {
+      const collectionData = {
+        vendor_id: newCollection.vendor_id,
+        collection_date: newCollection.collection_date,
+        collection_time: "08:00", // Default time
+        time_of_day: newCollection.time_of_day as "morning" | "day" | "evening",
+        quantity_liters: Number(newCollection.quantity_liters),
+        price_per_liter: Number(newCollection.price_per_liter),
+        notes: newCollection.notes || "",
+      }
+
+      await milkCollectionOperations.create(collectionData)
+      await loadCollections()
+
+      // Reset form but keep the vendor ID selected
+      const selectedVendorId = newCollection.vendor_id
+      setNewCollection({
+        vendor_id: selectedVendorId,
+        collection_date: format(new Date(), "yyyy-MM-dd"),
+        time_of_day: "morning",
+        quantity_liters: 0,
+        price_per_liter: getVendorMilkPrice(selectedVendorId),
+        notes: "",
+      })
+      setIsAddCollectionOpen(false)
+
+      const vendor = vendors.find((v) => v.id === collectionData.vendor_id)
+      toast({
+        title: "Collection Added",
+        description: `Collection for ${vendor?.name} has been added successfully.`,
+      })
+    } catch (error) {
+      console.error("Error adding collection:", error)
+      toast({
+        title: "Error",
+        description: "Failed to add collection. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
     }
-
-    const updatedCollections = collections.map((c) => (c.id === selectedCollection.id ? updatedCollection : c))
-    setCollections(updatedCollections)
-    localStorage.setItem("milkCollections", JSON.stringify(updatedCollections))
-
-    setNewCollection({
-      vendorId: "",
-      date: format(new Date(), "yyyy-MM-dd"),
-      timeOfDay: "morning",
-      quantity: 0,
-      price: defaultMilkPrice,
-      notes: "",
-    })
-    setSelectedCollection(null)
-    setIsEditCollectionOpen(false)
-
-    const vendor = vendors.find((v) => v.id === updatedCollection.vendorId)
-    toast({
-      title: "Collection Updated",
-      description: `Collection for ${vendor?.name} has been updated successfully.`,
-    })
-
-    // Log activity
-    const activityLogs = JSON.parse(localStorage.getItem("activityLogs") || "[]")
-    activityLogs.unshift({
-      id: Date.now().toString(),
-      action: "Milk Collection Updated",
-      details: `Updated milk collection: ${updatedCollection.quantity}L from ${vendor?.name} (${updatedCollection.timeOfDay})`,
-      timestamp: new Date().toISOString(),
-    })
-    localStorage.setItem("activityLogs", JSON.stringify(activityLogs))
   }
 
-  const handleDeleteCollection = () => {
+  const handleEditCollection = async () => {
+    if (
+      !selectedCollection ||
+      !newCollection.vendor_id ||
+      !newCollection.collection_date ||
+      !newCollection.quantity_liters ||
+      !newCollection.price_per_liter
+    )
+      return
+
+    // Validate date
+    if (!validateDate(newCollection.collection_date as string)) return
+
+    setSaving(true)
+    try {
+      const updates = {
+        vendor_id: newCollection.vendor_id,
+        collection_date: newCollection.collection_date,
+        time_of_day: newCollection.time_of_day as "morning" | "day" | "evening",
+        quantity_liters: Number(newCollection.quantity_liters),
+        price_per_liter: Number(newCollection.price_per_liter),
+        notes: newCollection.notes || "",
+      }
+
+      await milkCollectionOperations.update(selectedCollection.id, updates)
+      await loadCollections()
+
+      setNewCollection({
+        vendor_id: "",
+        collection_date: format(new Date(), "yyyy-MM-dd"),
+        time_of_day: "morning",
+        quantity_liters: 0,
+        price_per_liter: defaultMilkPrice,
+        notes: "",
+      })
+      setSelectedCollection(null)
+      setIsEditCollectionOpen(false)
+
+      const vendor = vendors.find((v) => v.id === updates.vendor_id)
+      toast({
+        title: "Collection Updated",
+        description: `Collection for ${vendor?.name} has been updated successfully.`,
+      })
+    } catch (error) {
+      console.error("Error updating collection:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update collection. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteCollection = async () => {
     if (!selectedCollection) return
 
-    const updatedCollections = collections.filter((c) => c.id !== selectedCollection.id)
-    setCollections(updatedCollections)
-    localStorage.setItem("milkCollections", JSON.stringify(updatedCollections))
+    try {
+      await milkCollectionOperations.delete(selectedCollection.id)
+      await loadCollections()
 
-    const vendor = vendors.find((v) => v.id === selectedCollection.vendorId)
-    setSelectedCollection(null)
-    setIsDeleteCollectionOpen(false)
+      const vendor = vendors.find((v) => v.id === selectedCollection.vendor_id)
+      setSelectedCollection(null)
+      setIsDeleteCollectionOpen(false)
 
-    toast({
-      title: "Collection Deleted",
-      description: `Collection for ${vendor?.name} has been deleted successfully.`,
-    })
-
-    // Log activity
-    const activityLogs = JSON.parse(localStorage.getItem("activityLogs") || "[]")
-    activityLogs.unshift({
-      id: Date.now().toString(),
-      action: "Milk Collection Deleted",
-      details: `Deleted milk collection: ${selectedCollection.quantity}L from ${vendor?.name} (${selectedCollection.timeOfDay})`,
-      timestamp: new Date().toISOString(),
-    })
-    localStorage.setItem("activityLogs", JSON.stringify(activityLogs))
+      toast({
+        title: "Collection Deleted",
+        description: `Collection for ${vendor?.name} has been deleted successfully.`,
+      })
+    } catch (error) {
+      console.error("Error deleting collection:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete collection. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   // Get vendor-specific milk price or use default
   const getVendorMilkPrice = (vendorId: string): number => {
     const vendor = vendors.find((v) => v.id === vendorId)
-    return vendor?.defaultMilkPrice || defaultMilkPrice
+    return vendor?.milk_price_per_liter || defaultMilkPrice
   }
 
   // Handle vendor selection in collection form
@@ -393,9 +433,27 @@ export default function VendorsPage() {
     const vendorPrice = getVendorMilkPrice(vendorId)
     setNewCollection({
       ...newCollection,
-      vendorId,
-      price: vendorPrice,
+      vendor_id: vendorId,
+      price_per_liter: vendorPrice,
     })
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center mb-6">
+          <Button variant="ghost" size="icon" asChild className="mr-2">
+            <Link href="/">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <h1 className="text-2xl font-bold text-emerald-800 dark:text-emerald-400">Vendors & Collections</h1>
+        </div>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -408,6 +466,15 @@ export default function VendorsPage() {
         </Button>
         <h1 className="text-2xl font-bold text-emerald-800 dark:text-emerald-400">Vendors & Collections</h1>
       </div>
+
+      {/* Connection Status */}
+      {!isSupabaseConfigured() && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-md dark:bg-amber-900/20 dark:border-amber-800">
+          <p className="text-amber-800 dark:text-amber-400">
+            <strong>Offline Mode:</strong> Using local storage. Connect to Supabase in Settings for real-time sync.
+          </p>
+        </div>
+      )}
 
       <Tabs defaultValue="vendors" className="mb-6">
         <TabsList className="bg-emerald-100 dark:bg-emerald-900/30">
@@ -459,7 +526,9 @@ export default function VendorsPage() {
                           <TableCell>{vendor.phone}</TableCell>
                           <TableCell>{vendor.email || "-"}</TableCell>
                           <TableCell>{vendor.address || "-"}</TableCell>
-                          <TableCell>{vendor.defaultMilkPrice?.toFixed(2) || defaultMilkPrice.toFixed(2)}</TableCell>
+                          <TableCell>
+                            {vendor.milk_price_per_liter?.toFixed(2) || defaultMilkPrice.toFixed(2)}
+                          </TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
                               <Button
@@ -473,7 +542,8 @@ export default function VendorsPage() {
                                     email: vendor.email,
                                     address: vendor.address,
                                     notes: vendor.notes,
-                                    defaultMilkPrice: vendor.defaultMilkPrice,
+                                    milk_price_per_liter: vendor.milk_price_per_liter,
+                                    vendor_type: vendor.vendor_type,
                                   })
                                   setIsEditVendorOpen(true)
                                 }}
@@ -483,7 +553,7 @@ export default function VendorsPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="text-red-500 hover:text-red-700"
+                                className="text-red-500 hover:text-red-700 bg-transparent"
                                 onClick={() => {
                                   setSelectedVendor(vendor)
                                   setIsDeleteVendorOpen(true)
@@ -547,19 +617,21 @@ export default function VendorsPage() {
                     </TableHeader>
                     <TableBody>
                       {collections
-                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                        .sort((a, b) => new Date(b.collection_date).getTime() - new Date(a.collection_date).getTime())
                         .map((collection) => {
-                          const vendor = vendors.find((v) => v.id === collection.vendorId)
+                          const vendor = vendors.find((v) => v.id === collection.vendor_id) || collection.vendors
                           return (
                             <TableRow key={collection.id}>
-                              <TableCell>{format(new Date(collection.date), "MMM dd, yyyy")}</TableCell>
+                              <TableCell>{format(new Date(collection.collection_date), "MMM dd, yyyy")}</TableCell>
                               <TableCell>
-                                <span className="capitalize">{collection.timeOfDay}</span>
+                                <span className="capitalize">{collection.time_of_day}</span>
                               </TableCell>
                               <TableCell className="font-medium">{vendor?.name || "Unknown"}</TableCell>
-                              <TableCell>{collection.quantity.toFixed(1)}</TableCell>
-                              <TableCell>{collection.price.toFixed(2)}</TableCell>
-                              <TableCell>{(collection.quantity * collection.price).toFixed(2)}</TableCell>
+                              <TableCell>{collection.quantity_liters.toFixed(1)}</TableCell>
+                              <TableCell>{collection.price_per_liter.toFixed(2)}</TableCell>
+                              <TableCell>
+                                {(collection.quantity_liters * collection.price_per_liter).toFixed(2)}
+                              </TableCell>
                               <TableCell>
                                 <div className="flex space-x-2">
                                   <Button
@@ -568,11 +640,11 @@ export default function VendorsPage() {
                                     onClick={() => {
                                       setSelectedCollection(collection)
                                       setNewCollection({
-                                        vendorId: collection.vendorId,
-                                        date: collection.date,
-                                        timeOfDay: collection.timeOfDay,
-                                        quantity: collection.quantity,
-                                        price: collection.price,
+                                        vendor_id: collection.vendor_id,
+                                        collection_date: collection.collection_date,
+                                        time_of_day: collection.time_of_day,
+                                        quantity_liters: collection.quantity_liters,
+                                        price_per_liter: collection.price_per_liter,
                                         notes: collection.notes,
                                       })
                                       setIsEditCollectionOpen(true)
@@ -583,7 +655,7 @@ export default function VendorsPage() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="text-red-500 hover:text-red-700"
+                                    className="text-red-500 hover:text-red-700 bg-transparent"
                                     onClick={() => {
                                       setSelectedCollection(collection)
                                       setIsDeleteCollectionOpen(true)
@@ -658,15 +730,15 @@ export default function VendorsPage() {
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="defaultMilkPrice" className="text-right">
+              <Label htmlFor="milk_price_per_liter" className="text-right">
                 Milk Price (KSH)
               </Label>
               <Input
-                id="defaultMilkPrice"
+                id="milk_price_per_liter"
                 type="number"
                 step="0.01"
-                value={newVendor.defaultMilkPrice}
-                onChange={(e) => setNewVendor({ ...newVendor, defaultMilkPrice: Number(e.target.value) })}
+                value={newVendor.milk_price_per_liter}
+                onChange={(e) => setNewVendor({ ...newVendor, milk_price_per_liter: Number(e.target.value) })}
                 className="col-span-3"
               />
               {defaultMilkPrice > 0 && (
@@ -691,8 +763,8 @@ export default function VendorsPage() {
             <Button variant="outline" onClick={() => setIsAddVendorOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddVendor} disabled={!newVendor.name || !newVendor.phone}>
-              Add Vendor
+            <Button onClick={handleAddVendor} disabled={!newVendor.name || !newVendor.phone || saving}>
+              {saving ? "Adding..." : "Add Vendor"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -751,15 +823,15 @@ export default function VendorsPage() {
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-defaultMilkPrice" className="text-right">
+              <Label htmlFor="edit-milk_price_per_liter" className="text-right">
                 Milk Price (KSH)
               </Label>
               <Input
-                id="edit-defaultMilkPrice"
+                id="edit-milk_price_per_liter"
                 type="number"
                 step="0.01"
-                value={newVendor.defaultMilkPrice}
-                onChange={(e) => setNewVendor({ ...newVendor, defaultMilkPrice: Number(e.target.value) })}
+                value={newVendor.milk_price_per_liter}
+                onChange={(e) => setNewVendor({ ...newVendor, milk_price_per_liter: Number(e.target.value) })}
                 className="col-span-3"
               />
               {defaultMilkPrice > 0 && (
@@ -784,8 +856,8 @@ export default function VendorsPage() {
             <Button variant="outline" onClick={() => setIsEditVendorOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEditVendor} disabled={!newVendor.name || !newVendor.phone}>
-              Update Vendor
+            <Button onClick={handleEditVendor} disabled={!newVendor.name || !newVendor.phone || saving}>
+              {saving ? "Updating..." : "Update Vendor"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -832,7 +904,7 @@ export default function VendorsPage() {
               <Label htmlFor="vendor" className="text-right">
                 Vendor*
               </Label>
-              <Select value={newCollection.vendorId} onValueChange={handleVendorSelect}>
+              <Select value={newCollection.vendor_id} onValueChange={handleVendorSelect}>
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Select vendor" />
                 </SelectTrigger>
@@ -852,9 +924,9 @@ export default function VendorsPage() {
               <Input
                 id="date"
                 type="date"
-                value={newCollection.date}
+                value={newCollection.collection_date}
                 onChange={(e) => {
-                  setNewCollection({ ...newCollection, date: e.target.value })
+                  setNewCollection({ ...newCollection, collection_date: e.target.value })
                   validateDate(e.target.value)
                 }}
                 className="col-span-3"
@@ -866,9 +938,9 @@ export default function VendorsPage() {
                 Time of Day*
               </Label>
               <Select
-                value={newCollection.timeOfDay}
+                value={newCollection.time_of_day}
                 onValueChange={(value) =>
-                  setNewCollection({ ...newCollection, timeOfDay: value as "morning" | "day" | "evening" })
+                  setNewCollection({ ...newCollection, time_of_day: value as "morning" | "day" | "evening" })
                 }
               >
                 <SelectTrigger className="col-span-3">
@@ -889,8 +961,10 @@ export default function VendorsPage() {
                 id="quantity"
                 type="number"
                 step="0.1"
-                value={newCollection.quantity}
-                onChange={(e) => setNewCollection({ ...newCollection, quantity: Number.parseFloat(e.target.value) })}
+                value={newCollection.quantity_liters}
+                onChange={(e) =>
+                  setNewCollection({ ...newCollection, quantity_liters: Number.parseFloat(e.target.value) })
+                }
                 className="col-span-3"
               />
             </div>
@@ -902,13 +976,15 @@ export default function VendorsPage() {
                 id="price"
                 type="number"
                 step="0.01"
-                value={newCollection.price}
-                onChange={(e) => setNewCollection({ ...newCollection, price: Number.parseFloat(e.target.value) })}
+                value={newCollection.price_per_liter}
+                onChange={(e) =>
+                  setNewCollection({ ...newCollection, price_per_liter: Number.parseFloat(e.target.value) })
+                }
                 className="col-span-3"
               />
-              {newCollection.vendorId && (
+              {newCollection.vendor_id && (
                 <div className="col-span-3 col-start-2 text-sm text-gray-500">
-                  Vendor's default price: KSH {getVendorMilkPrice(newCollection.vendorId).toFixed(2)}
+                  Vendor's default price: KSH {getVendorMilkPrice(newCollection.vendor_id).toFixed(2)}
                 </div>
               )}
             </div>
@@ -931,14 +1007,15 @@ export default function VendorsPage() {
             <Button
               onClick={handleAddCollection}
               disabled={
-                !newCollection.vendorId ||
-                !newCollection.date ||
-                !newCollection.quantity ||
-                !newCollection.price ||
-                !!dateError
+                !newCollection.vendor_id ||
+                !newCollection.collection_date ||
+                !newCollection.quantity_liters ||
+                !newCollection.price_per_liter ||
+                !!dateError ||
+                saving
               }
             >
-              Record Collection
+              {saving ? "Recording..." : "Record Collection"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -965,7 +1042,7 @@ export default function VendorsPage() {
               <Label htmlFor="edit-vendor" className="text-right">
                 Vendor*
               </Label>
-              <Select value={newCollection.vendorId} onValueChange={handleVendorSelect}>
+              <Select value={newCollection.vendor_id} onValueChange={handleVendorSelect}>
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Select vendor" />
                 </SelectTrigger>
@@ -985,9 +1062,9 @@ export default function VendorsPage() {
               <Input
                 id="edit-date"
                 type="date"
-                value={newCollection.date}
+                value={newCollection.collection_date}
                 onChange={(e) => {
-                  setNewCollection({ ...newCollection, date: e.target.value })
+                  setNewCollection({ ...newCollection, collection_date: e.target.value })
                   validateDate(e.target.value)
                 }}
                 className="col-span-3"
@@ -999,9 +1076,9 @@ export default function VendorsPage() {
                 Time of Day*
               </Label>
               <Select
-                value={newCollection.timeOfDay}
+                value={newCollection.time_of_day}
                 onValueChange={(value) =>
-                  setNewCollection({ ...newCollection, timeOfDay: value as "morning" | "day" | "evening" })
+                  setNewCollection({ ...newCollection, time_of_day: value as "morning" | "day" | "evening" })
                 }
               >
                 <SelectTrigger className="col-span-3">
@@ -1022,8 +1099,10 @@ export default function VendorsPage() {
                 id="edit-quantity"
                 type="number"
                 step="0.1"
-                value={newCollection.quantity}
-                onChange={(e) => setNewCollection({ ...newCollection, quantity: Number.parseFloat(e.target.value) })}
+                value={newCollection.quantity_liters}
+                onChange={(e) =>
+                  setNewCollection({ ...newCollection, quantity_liters: Number.parseFloat(e.target.value) })
+                }
                 className="col-span-3"
               />
             </div>
@@ -1035,13 +1114,15 @@ export default function VendorsPage() {
                 id="edit-price"
                 type="number"
                 step="0.01"
-                value={newCollection.price}
-                onChange={(e) => setNewCollection({ ...newCollection, price: Number.parseFloat(e.target.value) })}
+                value={newCollection.price_per_liter}
+                onChange={(e) =>
+                  setNewCollection({ ...newCollection, price_per_liter: Number.parseFloat(e.target.value) })
+                }
                 className="col-span-3"
               />
-              {newCollection.vendorId && (
+              {newCollection.vendor_id && (
                 <div className="col-span-3 col-start-2 text-sm text-gray-500">
-                  Vendor's default price: KSH {getVendorMilkPrice(newCollection.vendorId).toFixed(2)}
+                  Vendor's default price: KSH {getVendorMilkPrice(newCollection.vendor_id).toFixed(2)}
                 </div>
               )}
             </div>
@@ -1064,14 +1145,15 @@ export default function VendorsPage() {
             <Button
               onClick={handleEditCollection}
               disabled={
-                !newCollection.vendorId ||
-                !newCollection.date ||
-                !newCollection.quantity ||
-                !newCollection.price ||
-                !!dateError
+                !newCollection.vendor_id ||
+                !newCollection.collection_date ||
+                !newCollection.quantity_liters ||
+                !newCollection.price_per_liter ||
+                !!dateError ||
+                saving
               }
             >
-              Update Collection
+              {saving ? "Updating..." : "Update Collection"}
             </Button>
           </DialogFooter>
         </DialogContent>

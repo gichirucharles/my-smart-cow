@@ -1,87 +1,108 @@
+"use client"
+
+import type React from "react"
+
 import Link from "next/link"
-import { Copyright } from "@/components/copyright"
+import { usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
 import {
-  Home,
-  Milk,
+  MilkIcon as Cow,
+  Droplets,
   Wheat,
-  Stethoscope,
-  BarChart2,
+  BarChart3,
+  Home,
   Settings,
-  LogOut,
-  DollarSign,
-  HelpCircle,
-  Baby,
-  ShoppingBag,
+  UserCog,
   CreditCard,
-  Tag,
+  Baby,
+  Stethoscope,
+  Users,
+  DollarSign,
+  TrendingUp,
+  HelpCircle,
 } from "lucide-react"
 
+type NavItem = {
+  label: string
+  href: string
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
+}
+
+const nav: NavItem[] = [
+  { label: "Dashboard", href: "/dashboard", icon: Home },
+  { label: "Cow Management", href: "/cows", icon: Cow },
+  { label: "Milk Records", href: "/production", icon: Droplets },
+  { label: "Feeding Monitor", href: "/cow-feeding", icon: Wheat },
+  { label: "Calves", href: "/calves", icon: Baby },
+  { label: "Vet Visits", href: "/vet-visits", icon: Stethoscope },
+  { label: "Veterinary", href: "/veterinary", icon: Stethoscope },
+  { label: "Reports", href: "/reports", icon: BarChart3 },
+  { label: "Vendors", href: "/vendors", icon: Users },
+  { label: "Feeds", href: "/feeds", icon: Wheat },
+  { label: "Expenses", href: "/expenses", icon: DollarSign },
+  { label: "Milk Pricing", href: "/milk-pricing", icon: TrendingUp },
+  { label: "Payment History", href: "/payment-history", icon: CreditCard },
+  { label: "Support", href: "/support", icon: HelpCircle },
+  { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Admin", href: "/admin", icon: UserCog },
+  { label: "Subscription", href: "/subscription", icon: CreditCard }, // Added subscription link
+]
+
+const subscriptionPlans = [
+  { name: "Bronze", cows: "Up to 3 cows", price: "KSH 150", color: "bg-amber-100 text-amber-800" },
+  { name: "Silver", cows: "Up to 7 cows", price: "KSH 300", color: "bg-gray-100 text-gray-800" },
+  { name: "Gold", cows: "Up to 15 cows", price: "KSH 500", color: "bg-yellow-100 text-yellow-800" },
+  { name: "Diamond", cows: "16+ cows", price: "KSH 800", color: "bg-emerald-100 text-emerald-800" },
+]
+
 export function BasicSidebar() {
-  // Navigation items
-  const navItems = [
-    { href: "/", label: "Dashboard", icon: <Home className="h-5 w-5" /> },
-    { href: "/cows", label: "Cow Management", icon: <Milk className="h-5 w-5" /> },
-    { href: "/production", label: "Milk Production", icon: <Milk className="h-5 w-5" /> },
-    { href: "/calves", label: "Calves", icon: <Baby className="h-5 w-5" /> },
-    { href: "/veterinary", label: "Veterinary", icon: <Stethoscope className="h-5 w-5" /> },
-    { href: "/feeds", label: "Feeds", icon: <Wheat className="h-5 w-5" /> },
-    { href: "/cow-feeding", label: "Cow Feeding", icon: <Wheat className="h-5 w-5" /> },
-    { href: "/expenses", label: "Expenses", icon: <DollarSign className="h-5 w-5" /> },
-    { href: "/vendors", label: "Vendors", icon: <ShoppingBag className="h-5 w-5" /> },
-    { href: "/milk-pricing", label: "Milk Pricing", icon: <Tag className="h-5 w-5" /> },
-    { href: "/reports", label: "Reports", icon: <BarChart2 className="h-5 w-5" /> },
-    { href: "/subscription", label: "Subscription", icon: <CreditCard className="h-5 w-5" /> },
-    { href: "/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> },
-    { href: "/support", label: "Support", icon: <HelpCircle className="h-5 w-5" /> },
-  ]
+  const pathname = usePathname()
 
   return (
-    <div className="w-64 bg-emerald-700 text-white h-screen fixed left-0 top-0 overflow-y-auto shadow-xl">
-      <div className="p-4 border-b border-emerald-600">
-        <div className="flex items-center justify-center">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" className="text-white">
-            <path
-              fill="currentColor"
-              d="M18.5 2.75a.75.75 0 0 1 .75.75v1a.75.75 0 0 1-1.5 0v-1a.75.75 0 0 1 .75-.75Zm2.25 2.5a.75.75 0 0 1 .75-.75h1a.75.75 0 0 1 0 1.5h-1a.75.75 0 0 1-.75-.75Zm-4.5 0a.75.75 0 0 1 .75-.75h1a.75.75 0 0 1 0 1.5h-1a.75.75 0 0 1-.75-.75Zm.75 2.75a.75.75 0 0 0-.75.75v1a.75.75 0 0 0 1.5 0v-1a.75.75 0 0 0-.75-.75ZM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7ZM8.5 12a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0Zm11.75 4.484c-.16-.293-.552-.398-.845-.238a5.5 5.5 0 0 1-5.61.141.75.75 0 0 0-.69 1.331 7 7 0 0 0 7.145-.234c.293-.16.398-.552.238-.845l-.238-.155ZM12 2.75a9.25 9.25 0 1 0 0 18.5 9.25 9.25 0 0 0 0-18.5ZM4.25 12a7.75 7.75 0 1 1 15.5 0 7.75 7.75 0 0 1-15.5 0Z"
-            />
-          </svg>
-          <h1 className="ml-2 text-xl font-bold">Maziwa Smart</h1>
-        </div>
-        <div className="mt-2 text-center text-sm">
-          <p className="font-medium">Hello, User</p>
-        </div>
+    <aside
+      aria-label="Sidebar"
+      className="hidden md:flex h-screen w-64 flex-col border-r bg-white/90 backdrop-blur dark:bg-gray-900/40 overflow-y-auto"
+    >
+      <div className="px-4 py-4 border-b">
+        <Link href="/" className="flex items-center gap-2">
+          <Cow className="h-6 w-6 text-emerald-600" />
+          <span className="font-semibold">Smart Cow</span>
+        </Link>
       </div>
 
-      <nav className="p-2">
+      <nav className="flex-1 p-2">
         <ul className="space-y-1">
-          {navItems.map((item) => (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                className="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-emerald-600"
-              >
-                <span className="mr-3">{item.icon}</span>
-                {item.label}
-              </Link>
-            </li>
-          ))}
+          {nav.map((item) => {
+            const Icon = item.icon
+            const active = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href))
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                    active
+                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                      : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800",
+                  )}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <Icon
+                    className={cn("h-5 w-5", active ? "text-emerald-700 dark:text-emerald-300" : "text-gray-500")}
+                  />
+                  <span>{item.label}</span>
+                </Link>
+              </li>
+            )
+          })}
         </ul>
+
+        {/* Removed the static Subscription Section from BasicSidebar */}
       </nav>
 
-      <div className="p-4 border-t border-emerald-600 mt-auto">
-        <div className="flex items-center justify-between px-3 py-2 mb-3">
-          <span className="text-sm font-medium">Theme</span>
-          <div className="bg-white rounded-full p-1">
-            <span className="text-emerald-700">☀️</span>
-          </div>
-        </div>
-
-        <button className="w-full flex items-center justify-center px-3 py-2 rounded-md text-sm font-medium bg-emerald-600 hover:bg-emerald-500">
-          <LogOut className="mr-2 h-4 w-4" />
-          Logout
-        </button>
-        <Copyright />
+      <div className="mt-auto px-4 py-3 text-xs text-gray-500 dark:text-gray-400 border-t">
+        <p>v1.0 — Reports added</p>
       </div>
-    </div>
+    </aside>
   )
 }

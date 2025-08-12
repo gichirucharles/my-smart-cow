@@ -2,187 +2,349 @@
 
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DataTable } from "@/components/data-table"
-import { sampleCowFeedRecords, calculateTotalFeedNeeded, type CowFeedRecord } from "@/lib/feed-helpers"
+import { Plus, Download, Wheat, Scale } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import * as XLSX from "xlsx"
+
+// Mock data for cow feeding records
+const mockFeedingRecords = [
+  {
+    id: "1",
+    cowId: "C001",
+    date: "2023-12-01",
+    feedType: "Concentrate",
+    quantityKg: 5.5,
+    mineralsGms: 50,
+    cost: 275,
+    notes: "Morning feeding",
+  },
+  {
+    id: "2",
+    cowId: "C002",
+    date: "2023-12-01",
+    feedType: "Hay",
+    quantityKg: 12.0,
+    mineralsGms: 30,
+    cost: 120,
+    notes: "Evening feeding",
+  },
+  {
+    id: "3",
+    cowId: "C001",
+    date: "2023-12-02",
+    feedType: "Silage",
+    quantityKg: 8.0,
+    mineralsGms: 40,
+    cost: 160,
+    notes: "Afternoon feeding",
+  },
+]
+
+// Mock data for feed inventory
+const mockFeedInventory = [
+  {
+    id: "1",
+    feedType: "Concentrate",
+    currentStock: 500,
+    unit: "kg",
+    costPerUnit: 50,
+    reorderLevel: 100,
+    bagsNeeded: 5,
+  },
+  {
+    id: "2",
+    feedType: "Hay",
+    currentStock: 200,
+    unit: "kg",
+    costPerUnit: 10,
+    reorderLevel: 50,
+    bagsNeeded: 3,
+  },
+  {
+    id: "3",
+    feedType: "Silage",
+    currentStock: 300,
+    unit: "kg",
+    costPerUnit: 20,
+    reorderLevel: 75,
+    bagsNeeded: 2,
+  },
+]
+
+const feedingColumns = [
+  { key: "date", title: "Date" },
+  { key: "cowId", title: "Cow ID" },
+  { key: "feedType", title: "Feed Type" },
+  { key: "quantityKg", title: "Quantity (kg)" },
+  { key: "mineralsGms", title: "Minerals (gms)" },
+  { key: "cost", title: "Cost (KSH)" },
+  { key: "notes", title: "Notes" },
+]
+
+const inventoryColumns = [
+  { key: "feedType", title: "Feed Type" },
+  { key: "currentStock", title: "Current Stock" },
+  { key: "unit", title: "Unit" },
+  { key: "costPerUnit", title: "Cost/Unit (KSH)" },
+  { key: "reorderLevel", title: "Reorder Level" },
+  { key: "bagsNeeded", title: "Bags to Purchase" },
+]
 
 export default function CowFeedingPage() {
-  const [activeTab, setActiveTab] = useState("daily-feeding")
-  const [feedRecords, setFeedRecords] = useState<CowFeedRecord[]>(sampleCowFeedRecords)
-  const [newRecord, setNewRecord] = useState<Partial<CowFeedRecord>>({
+  const [feedingRecords, setFeedingRecords] = useState(mockFeedingRecords)
+  const [feedInventory, setFeedInventory] = useState(mockFeedInventory)
+  const [isAddingRecord, setIsAddingRecord] = useState(false)
+  const [newRecord, setNewRecord] = useState({
     cowId: "",
-    cowName: "",
+    date: "",
     feedType: "",
-    quantityKg: 0,
-    mineralGrams: 0,
+    quantityKg: "",
+    mineralsGms: "",
+    cost: "",
+    notes: "",
   })
 
-  const feedTotals = calculateTotalFeedNeeded(feedRecords)
-
   const handleAddRecord = () => {
-    if (
-      newRecord.cowId &&
-      newRecord.cowName &&
-      newRecord.feedType &&
-      newRecord.quantityKg &&
-      newRecord.quantityKg > 0
-    ) {
-      const record: CowFeedRecord = {
-        ...(newRecord as CowFeedRecord),
-        date: new Date().toISOString().split("T")[0],
+    if (newRecord.cowId && newRecord.date && newRecord.feedType && newRecord.quantityKg) {
+      const record = {
+        id: (feedingRecords.length + 1).toString(),
+        cowId: newRecord.cowId,
+        date: newRecord.date,
+        feedType: newRecord.feedType,
+        quantityKg: Number.parseFloat(newRecord.quantityKg),
+        mineralsGms: Number.parseFloat(newRecord.mineralsGms) || 0,
+        cost: Number.parseFloat(newRecord.cost) || 0,
+        notes: newRecord.notes,
       }
-      setFeedRecords([...feedRecords, record])
+      setFeedingRecords([...feedingRecords, record])
       setNewRecord({
         cowId: "",
-        cowName: "",
+        date: "",
         feedType: "",
-        quantityKg: 0,
-        mineralGrams: 0,
+        quantityKg: "",
+        mineralsGms: "",
+        cost: "",
+        notes: "",
       })
+      setIsAddingRecord(false)
     }
   }
 
+  const exportFeedingRecords = () => {
+    const ws = XLSX.utils.json_to_sheet(feedingRecords)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Feeding Records")
+    XLSX.writeFile(wb, "cow-feeding-records.xlsx")
+  }
+
+  const exportInventory = () => {
+    const ws = XLSX.utils.json_to_sheet(feedInventory)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Feed Inventory")
+    XLSX.writeFile(wb, "feed-inventory.xlsx")
+  }
+
   return (
-    <div className="container mx-auto py-6">
-      <h1 className="text-3xl font-bold tracking-tight mb-6">Cow Feeding Management</h1>
+    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 p-4 sm:p-6">
+      <Card className="w-full max-w-6xl mx-auto">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold">Cow Feeding Management</CardTitle>
+          <CardDescription>Track daily feeding records and manage feed inventory.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="feeding" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="feeding">
+                <Wheat className="h-4 w-4 mr-2" />
+                Daily Feeding
+              </TabsTrigger>
+              <TabsTrigger value="inventory">
+                <Scale className="h-4 w-4 mr-2" />
+                Feed Inventory
+              </TabsTrigger>
+            </TabsList>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="daily-feeding">Daily Feeding</TabsTrigger>
-          <TabsTrigger value="feed-inventory">Feed Inventory</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="daily-feeding" className="space-y-4">
-          <Card className="max-h-[80vh] overflow-y-auto">
-            <CardHeader>
-              <CardTitle>Record Daily Feed Consumption</CardTitle>
-              <CardDescription>Track how much each cow eats daily</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cowId">Cow ID</Label>
-                  <Input
-                    id="cowId"
-                    placeholder="Enter cow ID"
-                    value={newRecord.cowId}
-                    onChange={(e) => setNewRecord({ ...newRecord, cowId: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cowName">Cow Name</Label>
-                  <Input
-                    id="cowName"
-                    placeholder="Enter cow name"
-                    value={newRecord.cowName}
-                    onChange={(e) => setNewRecord({ ...newRecord, cowName: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="feedType">Feed Type</Label>
-                  <Select
-                    value={newRecord.feedType}
-                    onValueChange={(value) => setNewRecord({ ...newRecord, feedType: value })}
-                  >
-                    <SelectTrigger id="feedType">
-                      <SelectValue placeholder="Select feed type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Hay">Hay</SelectItem>
-                      <SelectItem value="Silage">Silage</SelectItem>
-                      <SelectItem value="Concentrate">Concentrate</SelectItem>
-                      <SelectItem value="Mixed Feed">Mixed Feed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="quantityKg">Quantity (kg)</Label>
-                  <Input
-                    id="quantityKg"
-                    type="number"
-                    placeholder="Enter quantity in kg"
-                    value={newRecord.quantityKg || ""}
-                    onChange={(e) => setNewRecord({ ...newRecord, quantityKg: Number.parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="mineralGrams">Minerals (grams)</Label>
-                  <Input
-                    id="mineralGrams"
-                    type="number"
-                    placeholder="Enter minerals in grams"
-                    value={newRecord.mineralGrams || ""}
-                    onChange={(e) =>
-                      setNewRecord({ ...newRecord, mineralGrams: Number.parseFloat(e.target.value) || 0 })
-                    }
-                  />
-                </div>
-                <div className="flex items-end">
-                  <Button onClick={handleAddRecord}>Add Record</Button>
+            <TabsContent value="feeding" className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Daily Feeding Records</h3>
+                <div className="flex gap-2">
+                  <Dialog open={isAddingRecord} onOpenChange={setIsAddingRecord}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Record
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>Add Feeding Record</DialogTitle>
+                        <DialogDescription>Add a new daily feeding record for a cow.</DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="cowId">Cow ID</Label>
+                          <Input
+                            id="cowId"
+                            value={newRecord.cowId}
+                            onChange={(e) => setNewRecord({ ...newRecord, cowId: e.target.value })}
+                            placeholder="e.g., C001"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="date">Date</Label>
+                          <Input
+                            id="date"
+                            type="date"
+                            value={newRecord.date}
+                            onChange={(e) => setNewRecord({ ...newRecord, date: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="feedType">Feed Type</Label>
+                          <Select
+                            value={newRecord.feedType}
+                            onValueChange={(value) => setNewRecord({ ...newRecord, feedType: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select feed type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Concentrate">Concentrate</SelectItem>
+                              <SelectItem value="Hay">Hay</SelectItem>
+                              <SelectItem value="Silage">Silage</SelectItem>
+                              <SelectItem value="Grass">Grass</SelectItem>
+                              <SelectItem value="Maize">Maize</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="quantityKg">Quantity (kg)</Label>
+                          <Input
+                            id="quantityKg"
+                            type="number"
+                            step="0.1"
+                            value={newRecord.quantityKg}
+                            onChange={(e) => setNewRecord({ ...newRecord, quantityKg: e.target.value })}
+                            placeholder="0.0"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="mineralsGms">Minerals (gms)</Label>
+                          <Input
+                            id="mineralsGms"
+                            type="number"
+                            value={newRecord.mineralsGms}
+                            onChange={(e) => setNewRecord({ ...newRecord, mineralsGms: e.target.value })}
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="cost">Cost (KSH)</Label>
+                          <Input
+                            id="cost"
+                            type="number"
+                            step="0.01"
+                            value={newRecord.cost}
+                            onChange={(e) => setNewRecord({ ...newRecord, cost: e.target.value })}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="notes">Notes</Label>
+                          <Input
+                            id="notes"
+                            value={newRecord.notes}
+                            onChange={(e) => setNewRecord({ ...newRecord, notes: e.target.value })}
+                            placeholder="Optional notes"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setIsAddingRecord(false)}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleAddRecord}>Add Record</Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                  <Button onClick={exportFeedingRecords} variant="outline">
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </Button>
                 </div>
               </div>
 
-              <div className="mt-6">
-                <DataTable
-                  data={feedRecords}
-                  columns={[
-                    { key: "cowName", title: "Cow Name" },
-                    { key: "feedType", title: "Feed Type" },
-                    { key: "quantityKg", title: "Quantity (kg)" },
-                    { key: "mineralGrams", title: "Minerals (g)" },
-                    { key: "date", title: "Date" },
-                  ]}
-                  searchable
-                  searchKeys={["cowName", "feedType"]}
-                  pagination
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              <DataTable
+                data={feedingRecords}
+                columns={feedingColumns}
+                searchable={true}
+                searchKeys={["cowId", "feedType", "date"]}
+                pagination={true}
+                pageSize={10}
+              />
+            </TabsContent>
 
-        <TabsContent value="feed-inventory" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Feed Inventory</CardTitle>
-              <CardDescription>Track feed usage and required purchases</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-md border">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="h-10 px-4 text-left font-medium">Feed Type</th>
-                      <th className="h-10 px-4 text-left font-medium">Total Quantity (kg)</th>
-                      <th className="h-10 px-4 text-left font-medium">Estimated Bags Needed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {feedTotals.map((item, i) => (
-                      <tr key={i} className="border-b">
-                        <td className="p-4">{item.feedType}</td>
-                        <td className="p-4">{item.totalKg.toFixed(1)} kg</td>
-                        <td className="p-4">{item.estimatedBags} bags (50kg each)</td>
-                      </tr>
+            <TabsContent value="inventory" className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Feed Inventory & Purchase Planning</h3>
+                <Button onClick={exportInventory} variant="outline">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Inventory
+                </Button>
+              </div>
+
+              <DataTable
+                data={feedInventory}
+                columns={inventoryColumns}
+                searchable={true}
+                searchKeys={["feedType"]}
+                pagination={true}
+                pageSize={10}
+              />
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Purchase Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {feedInventory.map((item) => (
+                      <div key={item.id} className="p-4 border rounded-lg">
+                        <h4 className="font-semibold">{item.feedType}</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Current: {item.currentStock} {item.unit}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Reorder at: {item.reorderLevel} {item.unit}
+                        </p>
+                        <div className="mt-2">
+                          <span className="text-lg font-bold text-blue-600">{item.bagsNeeded} bags needed</span>
+                          <p className="text-sm">
+                            Est. Cost: KSH {(item.bagsNeeded * item.costPerUnit * 50).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
                     ))}
-                    {feedTotals.length === 0 && (
-                      <tr>
-                        <td colSpan={3} className="h-24 text-center">
-                          No feed records available.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   )
 }

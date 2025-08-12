@@ -4,235 +4,284 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { AlertCircle, Check, Lock, User } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { supabase } from "@/lib/supabase"
+import { createUser, checkAdminExists } from "@/lib/supabase-operations"
+import { useAuth } from "@/components/auth-provider"
+import Link from "next/link"
+import { Eye, EyeOff, Shield, AlertTriangle } from "lucide-react"
 
 export default function AdminSetupPage() {
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [isAdminSetup, setIsAdminSetup] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [formData, setFormData] = useState({
+    fullName: "",
+    email: "",
+    phoneNumber: "",
+    password: "",
+    confirmPassword: "",
+  })
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [adminExists, setAdminExists] = useState(false)
+  const [checkingAdmin, setCheckingAdmin] = useState(true)
   const router = useRouter()
+  const { refreshUser } = useAuth()
 
   useEffect(() => {
-    // Check if admin is already set up
-    try {
-      if (typeof window !== "undefined") {
-        const users = JSON.parse(localStorage.getItem("users") || "[]")
-        const adminExists = users.some((user: any) => user.isAdmin)
-        setIsAdminSetup(adminExists)
-
-        if (adminExists) {
-          // Check if current user is admin
-          const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}")
-          if (!currentUser.isAdmin) {
-            router.push("/")
-          }
-        }
-        setIsLoading(false)
+    const checkForExistingAdmin = async () => {
+      try {
+        const exists = await checkAdminExists()
+        setAdminExists(exists)
+      } catch (error) {
+        console.error("Error checking for admin:", error)
+      } finally {
+        setCheckingAdmin(false)
       }
-    } catch (error) {
-      console.error("Error checking admin setup:", error)
-      setIsLoading(false)
     }
-  }, [router])
 
-  const handleSubmit = (e: React.FormEvent) => {
+    checkForExistingAdmin()
+  }, [])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    })
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null)
+    setLoading(true)
+    setError("")
 
-    // Validate inputs
-    if (!name || !email || !password) {
-      setError("All fields are required")
-      return
-    }
-
-    if (password !== confirmPassword) {
+    if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match")
+      setLoading(false)
       return
     }
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters")
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters long")
+      setLoading(false)
       return
     }
 
     try {
-      if (typeof window === "undefined") return
-
-      const users = JSON.parse(localStorage.getItem("users") || "[]")
-
-      // If admin setup, check if any admin already exists
-      if (!isAdminSetup) {
-        const adminExists = users.some((user: any) => user.isAdmin)
-        if (adminExists) {
-          setError("Admin already set up")
-          return
-        }
-      }
-
-      // Check if email already exists
-      const emailExists = users.some((user: any) => user.email === email)
-      if (emailExists) {
-        setError("Email already exists")
+      // Double-check admin doesn't exist
+      const exists = await checkAdminExists()
+      if (exists) {
+        setError("An admin account already exists")
+        setAdminExists(true)
         return
       }
 
-      // Create new admin user
-      const newUser = {
-        id: Date.now().toString(),
-        name,
-        email,
-        password, // In a real app, this should be hashed
-        isAdmin: true,
-        createdAt: new Date().toISOString(),
-        lastActive: new Date().toISOString(),
+      // Create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+      })
+
+      if (authError) {
+        setError(authError.message)
+        return
       }
 
-      // Add to users array
-      users.push(newUser)
-      localStorage.setItem("users", JSON.stringify(users))
+      if (authData.user) {
+        // Create admin profile in database
+        const adminProfile = await createUser({
+          id: authData.user.id,
+          email: formData.email,
+          full_name: formData.fullName,
+          phone_number: formData.phoneNumber,
+          role: "admin",
+          subscription_status: "active",
+          subscription_plan: "enterprise",
+          trial_end_date: null,
+        })
 
-      // If this is initial setup, also set as current user
-      if (!isAdminSetup) {
-        localStorage.setItem("currentUser", JSON.stringify(newUser))
+        if (adminProfile) {
+          await refreshUser()
+          router.push("/admin")
+        } else {
+          setError("Failed to create admin profile")
+        }
       }
-
-      setSuccess(true)
-      setTimeout(() => {
-        router.push("/admin")
-      }, 2000)
     } catch (err) {
-      setError("An error occurred. Please try again.")
-      console.error(err)
+      setError("An unexpected error occurred")
+    } finally {
+      setLoading(false)
     }
   }
 
-  if (isLoading) {
+  if (checkingAdmin) {
     return (
-      <div className="container flex items-center justify-center min-h-screen py-8">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Checking admin status...</p>
         </div>
       </div>
     )
   }
 
+  if (adminExists) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-50 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="p-3 bg-red-100 rounded-full">
+                <AlertTriangle className="h-8 w-8 text-red-600" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl font-bold text-red-800">Admin Already Exists</CardTitle>
+            <CardDescription>An administrator account has already been created for this system.</CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-gray-600 mb-6">
+              Only one admin account is allowed per system. If you need access, please contact the existing
+              administrator.
+            </p>
+            <Link href="/login">
+              <Button className="w-full">Go to Login</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
-    <div className="container flex items-center justify-center min-h-screen py-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-red-50 p-4">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>{isAdminSetup ? "Invite Admin User" : "Admin Setup"}</CardTitle>
-          <CardDescription>
-            {isAdminSetup
-              ? "Create credentials for a new admin user"
-              : "Set up your initial admin account to manage Maziwa Smart"}
-          </CardDescription>
+        <CardHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <div className="p-3 bg-orange-100 rounded-full">
+              <Shield className="h-8 w-8 text-orange-600" />
+            </div>
+          </div>
+          <CardTitle className="text-2xl font-bold text-orange-800">Admin Setup</CardTitle>
+          <CardDescription>Create the administrator account for Maziwa Smart</CardDescription>
         </CardHeader>
         <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {success && (
-            <Alert className="mb-4 bg-green-50 text-green-800 border-green-200">
-              <Check className="h-4 w-4" />
-              <AlertTitle>Success</AlertTitle>
-              <AlertDescription>
-                {isAdminSetup
-                  ? "Admin user has been invited successfully"
-                  : "Admin account has been set up successfully"}
-              </AlertDescription>
-            </Alert>
-          )}
+          <Alert className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Important:</strong> Only one admin account can be created. This account will have full system
+              access.
+            </AlertDescription>
+          </Alert>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  id="name"
-                  placeholder="Enter your full name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+              <Label htmlFor="fullName">Full Name</Label>
+              <Input
+                id="fullName"
+                name="fullName"
+                type="text"
+                placeholder="Enter admin full name"
+                value={formData.fullName}
+                onChange={handleChange}
+                required
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  className="absolute left-3 top-3 h-4 w-4 text-gray-400"
-                >
-                  <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
-                  <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
-                </svg>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="Enter admin email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phoneNumber">Phone Number</Label>
+              <Input
+                id="phoneNumber"
+                name="phoneNumber"
+                type="tel"
+                placeholder="Enter admin phone number"
+                value={formData.phoneNumber}
+                onChange={handleChange}
+                required
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="password"
-                  type="password"
-                  placeholder="Create a password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Create a strong password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="confirmPassword"
-                  type="password"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
                   placeholder="Confirm your password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="pl-10"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
               </div>
             </div>
+
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Creating Admin Account..." : "Create Admin Account"}
+            </Button>
           </form>
+
+          <div className="mt-6 text-center">
+            <Link href="/login" className="text-sm text-gray-500 hover:underline">
+              Back to Login
+            </Link>
+          </div>
         </CardContent>
-        <CardFooter>
-          <Button onClick={handleSubmit} className="w-full">
-            {isAdminSetup ? "Invite Admin" : "Create Admin Account"}
-          </Button>
-        </CardFooter>
       </Card>
     </div>
   )
