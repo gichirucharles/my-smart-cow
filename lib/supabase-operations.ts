@@ -1,4 +1,4 @@
-import { supabase } from "./supabase"
+import { createClient } from "@supabase/supabase-js"
 
 type UserProfile = {
   id: string
@@ -38,10 +38,69 @@ type WaitlistEntry = {
   notes?: string
 }
 
+type CowData = {
+  id: string
+  user_id: string
+  name: string
+  tag_number: string
+  breed: string
+  date_of_birth: string
+  lactation_status: any
+  created_at: string
+  updated_at: string
+}
+
+type MilkProductionData = {
+  id: string
+  user_id: string
+  cow_id: string
+  date: string
+  time_of_day: "morning" | "afternoon" | "evening"
+  amount: number
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+// Get the configured Supabase client
+function getConfiguredSupabaseClient() {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  const url = localStorage.getItem("supabase_url")
+  const key = localStorage.getItem("supabase_key")
+
+  if (!url || !key) {
+    return null
+  }
+
+  try {
+    return createClient(url, key, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+      },
+    })
+  } catch (error) {
+    console.error("Failed to create Supabase client:", error)
+    return null
+  }
+}
+
 // Test database connection with detailed error handling
 export async function testDatabaseConnection(): Promise<{ success: boolean; message: string }> {
   try {
     console.log("🔍 Testing database connection...")
+
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) {
+      return {
+        success: false,
+        message: "Supabase client not configured. Please set up your database connection first.",
+      }
+    }
 
     const { data, error } = await supabase.rpc("now")
 
@@ -102,7 +161,7 @@ export async function testDatabaseConnection(): Promise<{ success: boolean; mess
 }
 
 // Check database schema with comprehensive table and column validation
-export async function checkDatabaseSchema(): Promise<{
+export async function checkDatabaseSchemaV5(): Promise<{
   success: boolean
   message: string
   needsSchema?: boolean
@@ -111,6 +170,15 @@ export async function checkDatabaseSchema(): Promise<{
 }> {
   try {
     console.log("🔍 Checking database schema...")
+
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) {
+      return {
+        success: false,
+        message: "Supabase client not configured. Please set up your database connection first.",
+        needsSchema: true,
+      }
+    }
 
     // Define required tables and their essential columns
     const requiredSchema = {
@@ -199,7 +267,7 @@ export async function checkDatabaseSchema(): Promise<{
         })
       }
 
-      message += "\nPlease run the complete SQL schema script v3 in your Supabase SQL Editor."
+      message += "\nPlease run the complete SQL schema script v5 in your Supabase SQL Editor."
 
       return {
         success: false,
@@ -225,108 +293,263 @@ export async function checkDatabaseSchema(): Promise<{
   }
 }
 
+// Export backward compatible function name
+export const checkDatabaseSchema = checkDatabaseSchemaV5
+
 // Test connection with specific credentials (for setup)
-export async function testConnectionWithCredentials(
-  url: string,
-  key: string,
-): Promise<{ success: boolean; message: string; details?: any }> {
+export async function testConnectionWithCredentials(url: string, key: string) {
   try {
-    console.log("🔍 Testing connection with provided credentials...")
-    console.log("URL:", url)
-    console.log("Key length:", key.length)
+    // Create a test client
+    const { createClient } = await import("@supabase/supabase-js")
+    const testClient = createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    })
 
-    // Validate inputs
-    if (!url || !key) {
-      throw new Error("URL and API key are required")
+    // Test 1: Basic connectivity - try to get session (this tests auth endpoint)
+    const { error: sessionError } = await testClient.auth.getSession()
+    if (sessionError && !sessionError.message.includes("session_not_found")) {
+      throw new Error(`Auth connection failed: ${sessionError.message}`)
     }
 
-    if (!url.startsWith("https://")) {
-      throw new Error("Supabase URL must start with https://")
+    // Test 2: Try to access a system table to test database connectivity
+    const { error: dbError } = await testClient.from("users").select("count").limit(1)
+
+    // If we get a "relation does not exist" error, that's actually good - it means we can connect
+    // but the schema isn't set up yet
+    if (dbError && !dbError.message.includes("relation") && !dbError.message.includes("does not exist")) {
+      throw new Error(`Database connection failed: ${dbError.message}`)
     }
 
-    if (!url.includes("supabase.co") && !url.includes("localhost")) {
-      throw new Error("Invalid Supabase URL format")
-    }
-
-    // Create test client
-    const testClient = supabase
-
-    // Test 1: Basic connection
-    console.log("📡 Testing basic connectivity...")
-    const startTime = Date.now()
-
-    const { data, error } = await testClient.from("users").select("count").limit(1)
-
-    const responseTime = Date.now() - startTime
-
-    if (error) {
-      console.error("❌ Connection test failed:", error)
-
-      // Provide specific error messages
-      if (error.message.includes("relation") && error.message.includes("does not exist")) {
-        return {
-          success: true, // Connection works, just no tables yet
-          message: "Connection successful! Database is accessible but tables need to be created.",
-          details: {
-            connectionTime: responseTime,
-            status: "connected_no_tables",
-            url: url,
-            timestamp: new Date().toISOString(),
-          },
-        }
-      }
-
-      if (error.message.includes("JWT") || error.message.includes("Invalid API key")) {
-        throw new Error("Invalid API key. Please check your Supabase anon key.")
-      }
-
-      if (error.message.includes("Project not found")) {
-        throw new Error("Project not found. Please check your Supabase project URL.")
-      }
-
-      throw new Error(`Database error: ${error.message}`)
-    }
-
-    console.log("✅ Connection test successful!")
     return {
       success: true,
-      message: "Connection successful! Your Supabase database is fully accessible.",
+      message: "Connection successful! Database is accessible.",
       details: {
-        connectionTime: responseTime,
-        status: "connected_with_tables",
         url: url,
-        timestamp: new Date().toISOString(),
+        authWorking: true,
+        databaseWorking: true,
+        schemaExists: !dbError,
       },
     }
   } catch (error: any) {
-    console.error("❌ Connection test with credentials failed:", error)
-
-    let errorMessage = error.message || "Unknown connection error"
-
-    // Network-related errors
-    if (errorMessage.includes("fetch") || errorMessage.includes("network")) {
-      errorMessage = "Network error: Unable to reach Supabase. Check your internet connection and URL."
-    }
-    // CORS errors
-    else if (errorMessage.includes("CORS")) {
-      errorMessage = "CORS error: This might be a browser security issue. Try using the connection string method."
-    }
-    // Timeout errors
-    else if (errorMessage.includes("timeout")) {
-      errorMessage = "Connection timeout: Supabase is taking too long to respond. Try again later."
-    }
-
     return {
       success: false,
-      message: `Connection failed: ${errorMessage}`,
+      message: error.message || "Connection test failed",
+      details: null,
     }
   }
+}
+
+// Cow operations
+export const cowOperations = {
+  // Get all cows for a user
+  async getAll(userId?: string): Promise<CowData[]> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) {
+      // Return empty array for offline mode
+      return []
+    }
+
+    try {
+      let query = supabase.from("cows").select("*").order("created_at", { ascending: false })
+
+      if (userId) {
+        query = query.eq("user_id", userId)
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error("Error fetching cows:", error)
+      return []
+    }
+  },
+
+  // Create a new cow
+  async create(cowData: Omit<CowData, "id" | "created_at" | "updated_at">): Promise<CowData> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
+    const { data, error } = await supabase
+      .from("cows")
+      .insert([
+        {
+          ...cowData,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  // Update a cow
+  async update(id: string, updates: Partial<CowData>): Promise<CowData> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
+    const { data, error } = await supabase
+      .from("cows")
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  // Delete a cow
+  async delete(id: string): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
+    const { error } = await supabase.from("cows").delete().eq("id", id)
+
+    if (error) throw error
+  },
+
+  // Subscribe to changes
+  subscribe(callback: (payload: any) => void) {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) {
+      return () => {} // Return empty unsubscribe function
+    }
+
+    const subscription = supabase
+      .channel("cows_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "cows" }, callback)
+      .subscribe()
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  },
+}
+
+// Milk production operations
+export const milkProductionOperations = {
+  // Get all milk production records
+  async getAll(userId?: string): Promise<any[]> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) {
+      // Return empty array for offline mode
+      return []
+    }
+
+    try {
+      let query = supabase
+        .from("milk_production")
+        .select(`
+          *,
+          cows (
+            id,
+            name,
+            tag_number
+          )
+        `)
+        .order("date", { ascending: false })
+        .order("time_of_day", { ascending: false })
+
+      if (userId) {
+        query = query.eq("user_id", userId)
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error("Error fetching milk production records:", error)
+      return []
+    }
+  },
+
+  // Create a new milk production record
+  async create(recordData: Omit<MilkProductionData, "id" | "created_at" | "updated_at">): Promise<MilkProductionData> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
+    const { data, error } = await supabase
+      .from("milk_production")
+      .insert([
+        {
+          ...recordData,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  // Update a milk production record
+  async update(id: string, updates: Partial<MilkProductionData>): Promise<MilkProductionData> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
+    const { data, error } = await supabase
+      .from("milk_production")
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  // Delete a milk production record
+  async delete(id: string): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
+    const { error } = await supabase.from("milk_production").delete().eq("id", id)
+
+    if (error) throw error
+  },
+
+  // Subscribe to changes
+  subscribe(callback: (payload: any) => void) {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) {
+      return () => {} // Return empty unsubscribe function
+    }
+
+    const subscription = supabase
+      .channel("milk_production_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "milk_production" }, callback)
+      .subscribe()
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  },
 }
 
 // Waitlist operations
 export const waitlistOperations = {
   // Get all waitlist entries (admin only)
   async getAll(): Promise<WaitlistEntry[]> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { data, error } = await supabase.from("waitlist").select("*").order("requested_at", { ascending: false })
 
     if (error) throw error
@@ -335,6 +558,9 @@ export const waitlistOperations = {
 
   // Get pending waitlist entries
   async getPending(): Promise<WaitlistEntry[]> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { data, error } = await supabase
       .from("waitlist")
       .select("*")
@@ -347,6 +573,9 @@ export const waitlistOperations = {
 
   // Approve waitlist entry
   async approve(id: string, adminId: string, notes?: string): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { error } = await supabase
       .from("waitlist")
       .update({
@@ -362,6 +591,9 @@ export const waitlistOperations = {
 
   // Reject waitlist entry
   async reject(id: string, adminId: string, notes?: string): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { error } = await supabase
       .from("waitlist")
       .update({
@@ -376,6 +608,9 @@ export const waitlistOperations = {
 
   // Mark as converted (when user successfully signs up)
   async markConverted(email: string): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { error } = await supabase
       .from("waitlist")
       .update({
@@ -390,6 +625,9 @@ export const waitlistOperations = {
 
   // Add to waitlist
   async add(entry: Omit<WaitlistEntry, "id" | "status" | "requested_at">): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { error } = await supabase.from("waitlist").insert([
       {
         ...entry,
@@ -406,6 +644,9 @@ export const waitlistOperations = {
 export const userOperations = {
   // Get all users (admin only)
   async getAll(): Promise<UserProfile[]> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { data, error } = await supabase.from("users").select("*").order("created_at", { ascending: false })
 
     if (error) throw error
@@ -414,6 +655,9 @@ export const userOperations = {
 
   // Get user by ID
   async getById(id: string): Promise<UserProfile | null> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { data, error } = await supabase.from("users").select("*").eq("id", id).single()
 
     if (error) {
@@ -425,6 +669,9 @@ export const userOperations = {
 
   // Update user admin status
   async updateAdminStatus(id: string, isAdmin: boolean, role?: string, permissions?: any): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const updateData: any = { is_admin: isAdmin }
     if (role) updateData.role = role
     if (permissions) updateData.admin_permissions = permissions
@@ -436,6 +683,9 @@ export const userOperations = {
 
   // Get admin users
   async getAdmins(): Promise<UserProfile[]> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { data, error } = await supabase
       .from("users")
       .select("*")
@@ -448,6 +698,9 @@ export const userOperations = {
 
   // Update user profile
   async updateProfile(id: string, updates: Partial<UserProfile>): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { error } = await supabase.from("users").update(updates).eq("id", id)
 
     if (error) throw error
@@ -461,6 +714,9 @@ export const userOperations = {
     subscribed: number
     admins: number
   }> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { data: users, error } = await supabase.from("users").select("subscription_status, is_admin, last_login_at")
 
     if (error) throw error
@@ -496,6 +752,9 @@ export const feedOperations = {
     storage_location?: string
     notes?: string
   }): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { error } = await supabase.from("feed_inventory").insert([data])
 
     if (error) throw error
@@ -511,6 +770,9 @@ export const feedOperations = {
     minerals_gms?: number
     notes?: string
   }): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { error } = await supabase.from("feed_consumption").insert([data])
 
     if (error) throw error
@@ -518,6 +780,9 @@ export const feedOperations = {
 
   // Get feed consumption by cow
   async getConsumptionByCow(userId: string, cowId: string, startDate?: string, endDate?: string) {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     let query = supabase
       .from("feed_consumption")
       .select(`
@@ -557,6 +822,9 @@ export const dailyActivitiesOperations = {
     assigned_to?: string
     notes?: string
   }): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { error } = await supabase.from("daily_activities").insert([data])
 
     if (error) throw error
@@ -564,6 +832,9 @@ export const dailyActivitiesOperations = {
 
   // Get activities by date range
   async getByDateRange(userId: string, startDate: string, endDate: string) {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { data, error } = await supabase
       .from("daily_activities")
       .select(`
@@ -583,6 +854,9 @@ export const dailyActivitiesOperations = {
 
   // Mark activity as completed
   async markCompleted(id: string): Promise<void> {
+    const supabase = getConfiguredSupabaseClient()
+    if (!supabase) throw new Error("Supabase client not configured")
+
     const { error } = await supabase
       .from("daily_activities")
       .update({

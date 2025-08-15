@@ -6,7 +6,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 // Kenya counties list
 const KENYA_COUNTIES = [
@@ -68,7 +67,6 @@ export default function SignupForm() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [county, setCounty] = useState("")
   const [farmName, setFarmName] = useState("")
-  const [role, setRole] = useState("user")
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
@@ -103,17 +101,15 @@ export default function SignupForm() {
         return
       }
 
-      // Create new user
+      // Create new user - using only fields that exist in the database schema
       const newUser = {
         id: Date.now().toString(),
         name,
         email,
         phone,
         password, // In a real app, this would be hashed
-        role,
         county,
         farmName,
-        isAdmin: role === "admin", // Add isAdmin flag based on role
         createdAt: new Date().toISOString(),
         subscription: {
           plan: "free",
@@ -216,20 +212,6 @@ export default function SignupForm() {
             onChange={(e) => setFarmName(e.target.value)}
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
           />
-        </div>
-
-        <div>
-          <Label className="block text-sm font-medium text-gray-700">Account Type</Label>
-          <RadioGroup value={role} onValueChange={setRole} className="mt-2 flex space-x-6">
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="user" id="user" />
-              <Label htmlFor="user">User</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="admin" id="admin" />
-              <Label htmlFor="admin">Admin</Label>
-            </div>
-          </RadioGroup>
         </div>
 
         <div>

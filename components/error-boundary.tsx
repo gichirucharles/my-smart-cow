@@ -1,15 +1,18 @@
 "use client"
 
 import { Component, type ErrorInfo, type ReactNode } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface Props {
   children: ReactNode
-  fallback?: ReactNode
 }
 
 interface State {
   hasError: boolean
   error?: Error
+  errorInfo?: ErrorInfo
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -24,24 +27,53 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("ErrorBoundary caught an error:", error, errorInfo)
+    this.setState({ error, errorInfo })
   }
 
   render() {
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback
-      }
-
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center p-6 text-center">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
-          <p className="mb-4 max-w-md mx-auto">{this.state.error?.message || "An unexpected error occurred"}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Reload page
-          </button>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+          <Card className="w-full max-w-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-600">
+                <span className="text-2xl">⚠️</span>
+                Application Error
+              </CardTitle>
+              <CardDescription>
+                Something went wrong. Please try refreshing the page or contact support if the problem persists.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert variant="destructive">
+                <AlertDescription>
+                  <strong>Error:</strong> {this.state.error?.message || "Unknown error occurred"}
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex gap-2">
+                <Button onClick={() => window.location.reload()} className="bg-green-600 hover:bg-green-700">
+                  Refresh Page
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => this.setState({ hasError: false, error: undefined, errorInfo: undefined })}
+                >
+                  Try Again
+                </Button>
+              </div>
+
+              {process.env.NODE_ENV === "development" && this.state.errorInfo && (
+                <details className="mt-4">
+                  <summary className="cursor-pointer text-sm font-medium">Technical Details</summary>
+                  <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-auto">
+                    {this.state.error?.stack}
+                    {this.state.errorInfo.componentStack}
+                  </pre>
+                </details>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )
     }
